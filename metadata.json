@@ -1,0 +1,6 @@
+{
+  "name": "Eno's Pastries",
+  "description": "Delicious artisan pastries and drinks ordering platform",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
