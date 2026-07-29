@@ -52,9 +52,15 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
+    const rawItems = Array.isArray(body?.items) ? body.items : [];
+
+    if (rawItems.length === 0) {
+      return NextResponse.json({ error: 'Order must include at least one item' }, { status: 400 });
+    }
+
     const order = await prisma.order.create({
       data: {
-        totalAmount: body.totalAmount,
+        totalAmount: Number(body.totalAmount) || 0,
         status: body.status ?? 'PENDING',
         orderType: body.orderType ?? 'RETAIL',
         deliveryType: body.deliveryType ?? 'PICKUP',
@@ -64,10 +70,10 @@ export async function POST(request: Request) {
         customerEmail: body.customerEmail,
         customerPhone: body.customerPhone,
         items: {
-          create: body.items.map((item: any) => ({
+          create: rawItems.map((item: any) => ({
             productId: item.productId,
-            quantity: item.quantity,
-            price: item.price,
+            quantity: Number(item.quantity) || 1,
+            price: Number(item.price) || 0,
           })),
         },
       },
