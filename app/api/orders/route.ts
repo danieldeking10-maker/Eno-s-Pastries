@@ -69,6 +69,7 @@ export async function POST(request: Request) {
         customerName: body.customerName,
         customerEmail: body.customerEmail,
         customerPhone: body.customerPhone,
+        customerNote: body.customerNote || null,
         items: {
           create: rawItems.map((item: any) => ({
             productId: item.productId,

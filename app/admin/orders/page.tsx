@@ -23,6 +23,7 @@ type Order = {
   customerName: string
   customerEmail: string
   customerPhone: string
+  customerNote: string | null
   orderType: OrderType
   deliveryType: DeliveryType
   deliveryAddress: string | null
@@ -167,7 +168,13 @@ export default function AdminOrdersPage() {
                         {prettyOrderType(order.orderType)} • {prettyDeliveryType(order.deliveryType)}
                         {order.deliveryAddress ? ` • ${order.deliveryAddress}` : ''}
                       </p>
-                      <p className="text-sm text-gray-500">
+                      {order.customerNote && (
+                        <div className="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-sm text-stone-800">
+                          <span className="font-semibold text-amber-900 block mb-0.5">📝 Customer Note:</span>
+                          <p className="whitespace-pre-wrap text-stone-700">{order.customerNote}</p>
+                        </div>
+                      )}
+                      <p className="text-sm text-gray-500 mt-1">
                         Placed {new Date(order.createdAt).toLocaleString()}
                       </p>
                     </div>
@@ -340,6 +347,14 @@ export default function AdminOrdersPage() {
                     <span className="text-stone-500 block mb-0.5">Delivery Address:</span>
                     <p className="text-stone-800 font-sans text-[11px] bg-stone-50 p-2 rounded border border-stone-200">
                       {selectedPrintOrder.deliveryAddress}
+                    </p>
+                  </div>
+                )}
+                {selectedPrintOrder.customerNote && (
+                  <div className="pt-1">
+                    <span className="text-stone-500 block mb-0.5 font-bold text-amber-900">Customer Note / Special Instructions:</span>
+                    <p className="text-stone-800 font-sans text-[11px] bg-amber-50 p-2 rounded border border-amber-200 whitespace-pre-wrap">
+                      {selectedPrintOrder.customerNote}
                     </p>
                   </div>
                 )}

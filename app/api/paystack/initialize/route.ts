@@ -18,6 +18,7 @@ export async function POST(request: Request) {
       deliveryType,
       deliveryAddress,
       deliveryDate,
+      customerNote,
       totalAmount,
       items,
     } = reqBody
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
         customerName: customerName || 'Valued Customer',
         customerEmail,
         customerPhone: customerPhone || '',
+        customerNote: customerNote || null,
         items: {
           create: items.map((item: any) => ({
             productId: item.productId,

@@ -16,7 +16,8 @@ export default function CartPage() {
     orderType: 'Retail',
     deliveryType: 'Pickup',
     deliveryAddress: '',
-    deliveryDate: ''
+    deliveryDate: '',
+    customerNote: ''
   })
 
   const handleCheckoutSubmit = async (e: React.FormEvent) => {
@@ -41,6 +42,7 @@ export default function CartPage() {
       deliveryType: checkoutForm.deliveryType === 'Delivery' ? 'DELIVERY' : 'PICKUP',
       deliveryAddress: checkoutForm.deliveryType === 'Delivery' ? checkoutForm.deliveryAddress : null,
       deliveryDate: checkoutForm.deliveryDate ? checkoutForm.deliveryDate : null,
+      customerNote: checkoutForm.customerNote ? checkoutForm.customerNote : null,
       status: 'PENDING',
       totalAmount: cartTotal,
       items: cart.map((item) => ({
@@ -210,6 +212,18 @@ export default function CartPage() {
                         value={checkoutForm.deliveryDate}
                         onChange={(e) => setCheckoutForm({ ...checkoutForm, deliveryDate: e.target.value })}
                         className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-stone-700 mb-2">
+                        Customer Note / Special Instructions
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={checkoutForm.customerNote}
+                        onChange={(e) => setCheckoutForm({ ...checkoutForm, customerNote: e.target.value })}
+                        className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300 resize-none"
+                        placeholder="Add special instructions (e.g., allergies, delivery preferences, custom messages)"
                       />
                     </div>
                   </div>

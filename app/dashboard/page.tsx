@@ -53,6 +53,7 @@ interface Order {
   deliveryType: string
   deliveryAddress?: string | null
   deliveryDate?: string | null
+  customerNote?: string | null
   customerName: string
   customerEmail: string
   customerPhone: string
