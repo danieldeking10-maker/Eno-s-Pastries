@@ -15,7 +15,7 @@ export default function ProductsPage() {
   const [error, setError] = useState<string | null>(null)
 
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('All')
+  const [selectedCategory, setSelectedCategory] = useState<string>('All')
 
   useEffect(() => {
     let cancelled = false
@@ -44,15 +44,22 @@ export default function ProductsPage() {
     }
   }, [])
 
+  const categoriesList = useMemo(() => {
+    const cats = new Set(products.map((p) => p.category).filter(Boolean))
+    return ['All', ...Array.from(cats)]
+  }, [products])
+
   const filteredProducts = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
 
     return products.filter((product) => {
       const matchesSearch =
-        product.name.toLowerCase().includes(q) ||
+        (product.name || '').toLowerCase().includes(q) ||
         (product.description?.toLowerCase().includes(q) ?? false)
 
-      const matchesCategory = selectedCategory === 'All' || product.category === selectedCategory
+      const matchesCategory =
+        selectedCategory === 'All' ||
+        (product.category || '').toLowerCase() === selectedCategory.toLowerCase()
       return matchesSearch && matchesCategory
     })
   }, [products, searchQuery, selectedCategory])
@@ -87,20 +94,19 @@ export default function ProductsPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full md:w-96 px-6 py-4 rounded-full border-2 border-amber-200 focus:border-amber-500 focus:outline-none bg-white shadow-lg transition-all duration-300"
           />
-          <div className="flex gap-4">
-            {(['All', 'Pastry', 'Drink'] as const).map((category) => (
+          <div className="flex flex-wrap gap-2.5 justify-center">
+            {categoriesList.map((category) => (
               <button
                 key={category}
                 onClick={() => setSelectedCategory(category)}
-                className={
-                  selectedCategory === category
-                    ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-lg'
+                className={`px-5 py-2.5 rounded-full font-bold text-sm transition-all duration-300 cursor-pointer ${
+                  selectedCategory.toLowerCase() === category.toLowerCase()
+                    ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-md scale-105'
                     : 'bg-white text-stone-700 hover:bg-amber-100 border-2 border-amber-200'
-                }
+                }`}
               >
                 {category}
               </button>
-
             ))}
           </div>
 

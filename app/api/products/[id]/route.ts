@@ -34,6 +34,12 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json().catch(() => ({}));
     const dataToUpdate: any = { ...body };
+
+    if (dataToUpdate.price !== undefined) {
+      const numPrice = Number(dataToUpdate.price);
+      dataToUpdate.price = isNaN(numPrice) ? 0 : numPrice;
+    }
+
     if (dataToUpdate.ingredients !== undefined) {
       const rawIng = dataToUpdate.ingredients;
       dataToUpdate.ingredients = Array.isArray(rawIng)
@@ -42,6 +48,7 @@ export async function PUT(
         ? JSON.stringify(rawIng.split(',').map((i: string) => i.trim()).filter(Boolean))
         : '[]';
     }
+
     const product = await prisma.product.update({
       where: { id },
       data: dataToUpdate,
@@ -55,7 +62,7 @@ export async function PUT(
     return NextResponse.json({ ...product, price: Number(product.price), ingredients });
   } catch (error) {
     console.error('Error updating product:', error);
-    return NextResponse.json({ error: 'Failed to update product' }, { status: 500 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Failed to update product' }, { status: 500 });
   }
 }
 

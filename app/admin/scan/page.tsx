@@ -305,7 +305,7 @@ function AdminScanContent() {
 
               <span
                 className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-bold self-start sm:self-auto ${
-                  statusColors[order.status]
+                  statusColors[order.status] || 'bg-amber-100 text-amber-900'
                 }`}
               >
                 Current Status: {order.status}
@@ -385,13 +385,13 @@ function AdminScanContent() {
             <div className="bg-white p-4 rounded-xl border border-amber-100">
               <h5 className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Order Items</h5>
               <div className="divide-y divide-stone-100">
-                {order.items.map((item, idx) => (
+                {(order.items || []).map((item, idx) => (
                   <div key={idx} className="py-2 flex justify-between text-xs">
                     <span className="font-semibold text-stone-800">
                       {item.quantity}x {item.product?.name ?? item.productId}
                     </span>
                     <span className="font-mono text-stone-900">
-                      GH₵{(Number(item.price) * item.quantity).toFixed(2)}
+                      GH₵{(Number(item.price || 0) * (item.quantity || 1)).toFixed(2)}
                     </span>
                   </div>
                 ))}

@@ -115,23 +115,61 @@ export default function AdminProductsPage() {
     }))
   }
 
-  // Handle direct file upload conversion to Base64 Data URL
+  // Handle direct file upload conversion to compressed Base64 Data URL
   const handleFileUpload = (file: File) => {
     if (!file.type.startsWith('image/')) {
       showToast('error', 'Please upload a valid image file (PNG, JPG, WEBP).')
       return
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      showToast('error', 'Image size is too large (max 5MB).')
+    if (file.size > 10 * 1024 * 1024) {
+      showToast('error', 'Image size is too large (max 10MB).')
       return
     }
 
     const reader = new FileReader()
     reader.onload = (event) => {
-      const base64Url = event.target?.result as string
-      setFormData((prev) => ({ ...prev, imageUrl: base64Url }))
-      showToast('success', 'Image uploaded successfully!')
+      const src = event.target?.result as string
+      if (!src) return
+
+      const img = new Image()
+      img.onload = () => {
+        const MAX_DIM = 1000
+        let width = img.width
+        let height = img.height
+
+        if (width > height) {
+          if (width > MAX_DIM) {
+            height *= MAX_DIM / width
+            width = MAX_DIM
+          }
+        } else {
+          if (height > MAX_DIM) {
+            width *= MAX_DIM / height
+            height = MAX_DIM
+          }
+        }
+
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.round(width)
+        canvas.height = Math.round(height)
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+          setFormData((prev) => ({ ...prev, imageUrl: src }))
+          showToast('success', 'Image uploaded successfully!')
+          return
+        }
+
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.85)
+        setFormData((prev) => ({ ...prev, imageUrl: compressedBase64 }))
+        showToast('success', 'Image optimized and uploaded successfully!')
+      }
+      img.onerror = () => {
+        setFormData((prev) => ({ ...prev, imageUrl: src }))
+        showToast('success', 'Image attached successfully!')
+      }
+      img.src = src
     }
     reader.onerror = () => {
       showToast('error', 'Error reading image file.')
@@ -173,7 +211,7 @@ export default function AdminProductsPage() {
 
     const payload = {
       ...formData,
-      price: Number(formData.price),
+      price: Number(formData.price) || 0,
       ingredients: formData.ingredients
         .split(',')
         .map((i) => i.trim())
@@ -193,20 +231,23 @@ export default function AdminProductsPage() {
             body: JSON.stringify(payload),
           })
 
-      if (!res.ok) throw new Error('Failed to save product')
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || 'Failed to save product')
+      }
 
       showToast(
         'success',
         editingProduct
           ? `Product "${formData.name}" updated successfully!`
-          : `New product "${formData.name}" uploaded successfully!`
+          : `New product "${formData.name}" uploaded to market successfully!`
       )
 
       await loadProducts()
       resetForm()
     } catch (error) {
       console.error(error)
-      showToast('error', 'Could not save product. Please check input values.')
+      showToast('error', error instanceof Error ? error.message : 'Could not save product. Please check input values.')
     } finally {
       setIsSubmitting(false)
     }

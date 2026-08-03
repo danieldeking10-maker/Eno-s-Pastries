@@ -70,13 +70,22 @@ const statusColors: Record<OrderStatus, string> = {
   CANCELLED: 'bg-red-100 text-red-800 border border-red-200',
 }
 
-const statusIcons: Record<OrderStatus, React.ReactNode> = {
+const statusIcons: Record<string, React.ReactNode> = {
   PENDING: <Clock className="w-4 h-4 text-yellow-600" />,
   CONFIRMED: <CheckCircle2 className="w-4 h-4 text-blue-600" />,
   PREPARING: <Package className="w-4 h-4 text-purple-600" />,
   READY: <Sparkles className="w-4 h-4 text-amber-600" />,
   DELIVERED: <Truck className="w-4 h-4 text-emerald-600" />,
   CANCELLED: <X className="w-4 h-4 text-red-600" />,
+}
+
+function prettyStatus(s?: string): string {
+  if (!s) return 'Pending'
+  return String(s)
+    .toLowerCase()
+    .split('_')
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+    .join(' ')
 }
 
 const TIMELINE_STEPS = [
@@ -824,7 +833,7 @@ export default function UserDashboardPage() {
 
                             <span
                               className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
-                                statusColors[order.status]
+                                statusColors[order.status] || 'bg-stone-100 text-stone-800'
                               }`}
                             >
                               {statusIcons[order.status]}
@@ -899,7 +908,7 @@ export default function UserDashboardPage() {
                       <div className="mt-4">
                         <h4 className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-3">Order Items</h4>
                         <div className="divide-y divide-stone-100 border-t border-b border-stone-100">
-                          {order.items.map((item, idx) => (
+                          {(order.items || []).map((item, idx) => (
                             <div key={idx} className="py-3 flex items-center justify-between text-sm">
                               <div className="flex items-center gap-3">
                                 {item.product?.imageUrl && (
@@ -921,11 +930,11 @@ export default function UserDashboardPage() {
 
                               <div className="text-right">
                                 <span className="font-bold text-stone-900">
-                                  GH₵{(Number(item.price) * item.quantity).toFixed(2)}
+                                  GH₵{(Number(item.price || 0) * (item.quantity || 1)).toFixed(2)}
                                 </span>
-                                {item.quantity > 1 && (
+                                {(item.quantity || 1) > 1 && (
                                   <span className="block text-[11px] text-stone-400">
-                                    GH₵{Number(item.price).toFixed(2)} each
+                                    GH₵{Number(item.price || 0).toFixed(2)} each
                                   </span>
                                 )}
                               </div>
@@ -936,7 +945,7 @@ export default function UserDashboardPage() {
                         <div className="flex justify-between items-center mt-4 pt-2">
                           <span className="text-sm font-semibold text-stone-600">Total Order Amount</span>
                           <span className="text-2xl font-black text-amber-900">
-                            GH₵{Number(order.totalAmount).toFixed(2)}
+                            GH₵{Number(order.totalAmount || 0).toFixed(2)}
                           </span>
                         </div>
                       </div>

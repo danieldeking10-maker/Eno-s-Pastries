@@ -48,19 +48,20 @@ const statusColors: Record<OrderStatus, string> = {
   CANCELLED: 'bg-red-100 text-red-800',
 }
 
-function prettyStatus(s: OrderStatus) {
-  return s
+function prettyStatus(s?: string) {
+  if (!s) return 'Pending'
+  return String(s)
     .toLowerCase()
     .split('_')
     .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
     .join(' ')
 }
 
-function prettyOrderType(t: OrderType) {
+function prettyOrderType(t?: string) {
   return t === 'WHOLESALE' ? 'Wholesale' : 'Retail'
 }
 
-function prettyDeliveryType(d: DeliveryType) {
+function prettyDeliveryType(d?: string) {
   return d === 'DELIVERY' ? 'Delivery' : 'Pickup'
 }
 
@@ -200,7 +201,7 @@ export default function AdminOrdersPage() {
 
                       <div className="flex flex-col items-end gap-2">
                         <span
-                          className={`px-3 py-1 rounded-full text-sm font-medium ${statusColors[order.status]}`}
+                          className={`px-3 py-1 rounded-full text-sm font-medium ${statusColors[order.status] || 'bg-gray-100 text-gray-800'}`}
                         >
                           {prettyStatus(order.status)}
                         </span>
@@ -224,13 +225,13 @@ export default function AdminOrdersPage() {
                   <div className="border-t pt-4">
                     <h4 className="text-lg font-medium text-gray-900 mb-2">Items</h4>
                     <div className="space-y-2">
-                      {order.items.map((item, index) => (
+                      {(order.items || []).map((item, index) => (
                         <div key={index} className="flex justify-between items-center">
                           <span className="text-gray-700">
                             {item.quantity}x {item.product?.name ?? item.productId}
                           </span>
                           <span className="text-gray-900 font-medium">
-                            ${(item.price * item.quantity).toFixed(2)}
+                            ${(Number(item.price || 0) * (item.quantity || 1)).toFixed(2)}
                           </span>
                         </div>
                       ))}

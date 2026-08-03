@@ -17,6 +17,10 @@ interface ProductCardProps {
 }
 
 export default function ProductCard({ product, onAddToCart, index = 0 }: ProductCardProps) {
+  if (!product) return null
+
+  const priceNum = Number(product.price) || 0
+
   return (
     <div
       className={`product-card glassmorphism rounded-2xl overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 ${
@@ -28,7 +32,7 @@ export default function ProductCard({ product, onAddToCart, index = 0 }: Product
         {product.imageUrl && (
           <img
             src={product.imageUrl}
-            alt={product.name}
+            alt={product.name || 'Product'}
             className="w-full h-56 object-cover transition-transform duration-500 hover:scale-105"
           />
         )}
@@ -39,14 +43,14 @@ export default function ProductCard({ product, onAddToCart, index = 0 }: Product
         )}
       </div>
       <div className="p-6">
-        <div className="text-sm text-amber-700 font-medium mb-2">{product.category}</div>
-        <h3 className="text-xl font-semibold text-stone-800 mb-2">{product.name}</h3>
+        <div className="text-sm text-amber-700 font-medium mb-2">{product.category || 'Pastry'}</div>
+        <h3 className="text-xl font-semibold text-stone-800 mb-2">{product.name || 'Pastry Item'}</h3>
         {product.description && (
           <p className="text-stone-600 mb-4 text-sm line-clamp-2">{product.description}</p>
         )}
         <div className="flex items-center justify-between">
           <span className="text-3xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent">
-            GH₵{product.price.toFixed(2)}
+            GH₵{priceNum.toFixed(2)}
           </span>
           <button
             onClick={() => onAddToCart(product)}

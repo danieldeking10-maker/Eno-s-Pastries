@@ -18,24 +18,42 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<Product[]>([]);
 
   useEffect(() => {
-    const savedCart = localStorage.getItem('enosPastriesCart');
-    if (savedCart) {
-      setCart(JSON.parse(savedCart));
+    try {
+      if (typeof window !== 'undefined') {
+        const savedCart = localStorage.getItem('enosPastriesCart');
+        if (savedCart) {
+          const parsed = JSON.parse(savedCart);
+          if (Array.isArray(parsed)) {
+            setCart(parsed);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error loading cart from localStorage:', err);
     }
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('enosPastriesCart', JSON.stringify(cart));
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('enosPastriesCart', JSON.stringify(cart));
+      }
+    } catch (err) {
+      console.error('Error saving cart to localStorage:', err);
+    }
   }, [cart]);
 
   const addToCart = (product: Product) => {
-    setCart([...cart, product]);
+    if (!product) return;
+    setCart((prev) => [...prev, product]);
   };
 
   const removeFromCart = (index: number) => {
-    const newCart = [...cart];
-    newCart.splice(index, 1);
-    setCart(newCart);
+    setCart((prev) => {
+      const newCart = [...prev];
+      newCart.splice(index, 1);
+      return newCart;
+    });
   };
 
   const clearCart = () => {
@@ -43,7 +61,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   };
 
   const cartCount = cart.length;
-  const cartTotal = cart.reduce((sum, product) => sum + product.price, 0);
+  const cartTotal = cart.reduce((sum, product) => sum + (Number(product?.price) || 0), 0);
 
   return (
     <CartContext.Provider value={{ cart, addToCart, removeFromCart, clearCart, cartCount, cartTotal }}>
