@@ -78,14 +78,7 @@ const DEFAULT_PRODUCTS = [
 
 export async function GET() {
   try {
-    let products = await prisma.product.findMany();
-
-    if (products.length === 0) {
-      await prisma.product.createMany({
-        data: DEFAULT_PRODUCTS,
-      });
-      products = await prisma.product.findMany();
-    }
+    const products = await prisma.product.findMany();
 
     const formatted = products.map((p) => {
       let ingredients: string[] = []

@@ -231,7 +231,7 @@ export default function AdminOrdersPage() {
                             {item.quantity}x {item.product?.name ?? item.productId}
                           </span>
                           <span className="text-gray-900 font-medium">
-                            ${(Number(item.price || 0) * (item.quantity || 1)).toFixed(2)}
+                            GH₵{(Number(item.price || 0) * (item.quantity || 1)).toFixed(2)}
                           </span>
                         </div>
                       ))}
@@ -244,7 +244,7 @@ export default function AdminOrdersPage() {
                         <Printer className="w-4 h-4" /> Print Receipt
                       </button>
                       <span className="text-xl font-bold text-amber-700">
-                        Total: ${Number(order.totalAmount).toFixed(2)}
+                        Total: GH₵{Number(order.totalAmount || 0).toFixed(2)}
                       </span>
                     </div>
                   </div>
@@ -381,10 +381,10 @@ export default function AdminOrdersPage() {
                           {item.product?.name ?? item.productId}
                         </td>
                         <td className="py-1.5 align-top text-right text-stone-600">
-                          ${Number(item.price).toFixed(2)}
+                          GH₵{Number(item.price || 0).toFixed(2)}
                         </td>
                         <td className="py-1.5 align-top text-right font-semibold text-stone-900">
-                          ${(Number(item.price) * item.quantity).toFixed(2)}
+                          GH₵{(Number(item.price || 0) * (item.quantity || 1)).toFixed(2)}
                         </td>
                       </tr>
                     ))}
@@ -396,7 +396,7 @@ export default function AdminOrdersPage() {
               <div className="pt-3 border-t-2 border-stone-800 text-right space-y-1">
                 <div className="flex justify-between text-sm font-bold text-stone-900 font-sans">
                   <span>TOTAL AMOUNT</span>
-                  <span className="text-amber-800 text-base">${Number(selectedPrintOrder.totalAmount).toFixed(2)}</span>
+                  <span className="text-amber-800 text-base">GH₵{Number(selectedPrintOrder.totalAmount || 0).toFixed(2)}</span>
                 </div>
               </div>
 

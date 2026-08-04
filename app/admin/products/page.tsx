@@ -56,6 +56,8 @@ export default function AdminProductsPage() {
 
   const [showForm, setShowForm] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+  const [productToDelete, setProductToDelete] = useState<{ id: string; name: string } | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
@@ -293,18 +295,30 @@ export default function AdminProductsPage() {
     }
   }
 
-  const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete "${name}"?`)) return
+  const handleDelete = (id: string, name: string) => {
+    setProductToDelete({ id, name })
+  }
+
+  const confirmDeleteProduct = async () => {
+    if (!productToDelete) return
+    setIsDeleting(true)
 
     try {
-      const res = await fetch(`/api/products/${id}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error('Failed to delete product')
+      const res = await fetch(`/api/products/${productToDelete.id}`, { method: 'DELETE' })
+      const data = await res.json().catch(() => ({}))
 
-      showToast('success', `Product "${name}" deleted.`)
-      await loadProducts()
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to delete product')
+      }
+
+      setProducts((prev) => prev.filter((p) => p.id !== productToDelete.id))
+      showToast('success', `Product "${productToDelete.name}" deleted permanently.`)
+      setProductToDelete(null)
     } catch (error) {
       console.error(error)
-      showToast('error', 'Could not delete product.')
+      showToast('error', error instanceof Error ? error.message : 'Could not delete product.')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -877,6 +891,54 @@ export default function AdminProductsPage() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Delete Confirmation Custom Modal */}
+        {productToDelete && (
+          <div className="fixed inset-0 bg-stone-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-amber-200 animate-scale-up space-y-4">
+              <div className="flex items-center gap-3 text-red-600">
+                <div className="w-10 h-10 rounded-2xl bg-red-100 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-5 h-5 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-stone-900">Confirm Product Deletion</h3>
+                  <p className="text-xs text-stone-500">This action cannot be undone.</p>
+                </div>
+              </div>
+
+              <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 text-xs text-stone-700">
+                Are you sure you want to permanently delete <strong className="text-stone-900 font-extrabold">&quot;{productToDelete.name}&quot;</strong> from the shop inventory?
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={() => setProductToDelete(null)}
+                  className="px-5 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={confirmDeleteProduct}
+                  className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white font-black rounded-xl text-xs shadow-md transition-all cursor-pointer flex items-center gap-2"
+                >
+                  {isDeleting ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-3.5 h-3.5" /> Confirm Delete
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </main>

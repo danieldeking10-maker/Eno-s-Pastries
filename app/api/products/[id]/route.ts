@@ -35,6 +35,12 @@ export async function PUT(
     const body = await request.json().catch(() => ({}));
     const dataToUpdate: any = { ...body };
 
+    // Remove non-updatable fields that cause Prisma update errors
+    delete dataToUpdate.id;
+    delete dataToUpdate.createdAt;
+    delete dataToUpdate.updatedAt;
+    delete dataToUpdate.orderItems;
+
     if (dataToUpdate.price !== undefined) {
       const numPrice = Number(dataToUpdate.price);
       dataToUpdate.price = isNaN(numPrice) ? 0 : numPrice;
@@ -72,12 +78,21 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+
+    // Delete associated order items first to maintain DB integrity upon product removal
+    await prisma.orderItem.deleteMany({
+      where: { productId: id },
+    });
+
     await prisma.product.delete({
       where: { id },
     });
-    return NextResponse.json({ message: 'Product deleted' });
+
+    return NextResponse.json({ message: 'Product deleted permanently' });
   } catch (error) {
     console.error('Error deleting product:', error);
-    return NextResponse.json({ error: 'Failed to delete product' }, { status: 500 });
+    return NextResponse.json({
+      error: error instanceof Error ? error.message : 'Failed to delete product',
+    }, { status: 500 });
   }
 }

@@ -87,6 +87,117 @@ async function main() {
     })
   }
 
+  // Fetch created products to attach to sample orders
+  const createdProducts = await prisma.product.findMany()
+  if (createdProducts.length > 0) {
+    const p1 = createdProducts[0]
+    const p2 = createdProducts[1] || p1
+    const p3 = createdProducts[2] || p1
+
+    const sampleOrders = [
+      {
+        customerName: 'Kofi Mensah',
+        customerEmail: 'kofi.mensah@gmail.com',
+        customerPhone: '+233 24 123 4567',
+        deliveryType: 'DELIVERY' as const,
+        deliveryAddress: 'House 14, Boundary Road, East Legon, Accra',
+        status: 'PENDING' as const,
+        orderType: 'RETAIL' as const,
+        totalAmount: 45.00,
+        customerNote: 'Ring bell on gate, leave with security if unavailable.',
+        items: [
+          { productId: p1.id, quantity: 4, price: p1.price },
+          { productId: p2.id, quantity: 2, price: p2.price },
+        ]
+      },
+      {
+        customerName: 'Ama Serwaa',
+        customerEmail: 'ama.serwaa@yahoo.com',
+        customerPhone: '+233 50 987 6543',
+        deliveryType: 'DELIVERY' as const,
+        deliveryAddress: 'Plot 8 Cantonments Road, near US Embassy, Accra',
+        status: 'PENDING' as const,
+        orderType: 'WHOLESALE' as const,
+        totalAmount: 120.00,
+        customerNote: 'Corporate event order for 2 PM.',
+        items: [
+          { productId: p1.id, quantity: 15, price: p1.price },
+          { productId: p3.id, quantity: 10, price: p3.price },
+        ]
+      },
+      {
+        customerName: 'Kwame Osei',
+        customerEmail: 'kwame.osei@outlook.com',
+        customerPhone: '+233 27 555 0192',
+        deliveryType: 'DELIVERY' as const,
+        deliveryAddress: 'Airport Residential Area, 3rd Close, Accra',
+        status: 'PREPARING' as const,
+        orderType: 'RETAIL' as const,
+        totalAmount: 35.50,
+        customerNote: 'Please deliver warm before 11 AM.',
+        items: [
+          { productId: p2.id, quantity: 3, price: p2.price },
+          { productId: p3.id, quantity: 2, price: p3.price },
+        ]
+      },
+      {
+        customerName: 'Abena Appiah',
+        customerEmail: 'abena.a@gmail.com',
+        customerPhone: '+233 20 444 8811',
+        deliveryType: 'DELIVERY' as const,
+        deliveryAddress: '12 Ring Road East, Osu Oxford Street, Accra',
+        status: 'PENDING' as const,
+        orderType: 'RETAIL' as const,
+        totalAmount: 28.00,
+        customerNote: 'Call on arrival.',
+        items: [
+          { productId: p1.id, quantity: 2, price: p1.price },
+        ]
+      },
+      {
+        customerName: 'Yaw Boateng',
+        customerEmail: 'yaw.b@hotmail.com',
+        customerPhone: '+233 24 999 3322',
+        deliveryType: 'DELIVERY' as const,
+        deliveryAddress: 'Spintex Road, opp. Palace Mall, Accra',
+        status: 'READY' as const,
+        orderType: 'RETAIL' as const,
+        totalAmount: 52.00,
+        customerNote: 'Rider should contact reception.',
+        items: [
+          { productId: p2.id, quantity: 4, price: p2.price },
+          { productId: p1.id, quantity: 4, price: p1.price },
+        ]
+      },
+      {
+        customerName: 'Esi Frimpong',
+        customerEmail: 'esi.f@gmail.com',
+        customerPhone: '+233 54 112 2334',
+        deliveryType: 'DELIVERY' as const,
+        deliveryAddress: 'JAS Villa, East Legon Extension, Accra',
+        status: 'PENDING' as const,
+        orderType: 'RETAIL' as const,
+        totalAmount: 64.00,
+        customerNote: 'Close to East Legon cluster.',
+        items: [
+          { productId: p3.id, quantity: 6, price: p3.price },
+        ]
+      }
+    ]
+
+    for (const ord of sampleOrders) {
+      const { items, ...orderData } = ord
+      await prisma.order.create({
+        data: {
+          ...orderData,
+          items: {
+            create: items
+          }
+        }
+      })
+    }
+  }
+
   console.log('Seeding completed!')
 }
 

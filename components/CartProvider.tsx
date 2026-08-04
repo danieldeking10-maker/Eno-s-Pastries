@@ -16,6 +16,17 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<Product[]>([]);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  useEffect(() => {
+    const handleWindowError = (e: ErrorEvent) => {
+      if (e.message && e.message.includes('ResizeObserver loop completed with undelivered notifications')) {
+        e.stopImmediatePropagation();
+      }
+    };
+    window.addEventListener('error', handleWindowError);
+    return () => window.removeEventListener('error', handleWindowError);
+  }, []);
 
   useEffect(() => {
     try {
@@ -30,10 +41,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
       }
     } catch (err) {
       console.error('Error loading cart from localStorage:', err);
+    } finally {
+      setIsLoaded(true);
     }
   }, []);
 
   useEffect(() => {
+    if (!isLoaded) return;
     try {
       if (typeof window !== 'undefined') {
         localStorage.setItem('enosPastriesCart', JSON.stringify(cart));
@@ -41,7 +55,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error('Error saving cart to localStorage:', err);
     }
-  }, [cart]);
+  }, [cart, isLoaded]);
 
   const addToCart = (product: Product) => {
     if (!product) return;
