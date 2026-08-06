@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -32,6 +34,11 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
+    const existing = await prisma.product.findUnique({ where: { id } });
+    if (!existing) {
+      return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+    }
+
     const body = await request.json().catch(() => ({}));
     const dataToUpdate: any = { ...body };
 
@@ -78,6 +85,10 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+    const existing = await prisma.product.findUnique({ where: { id } });
+    if (!existing) {
+      return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+    }
 
     // Delete associated order items first to maintain DB integrity upon product removal
     await prisma.orderItem.deleteMany({

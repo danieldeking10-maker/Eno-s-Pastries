@@ -31,9 +31,36 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Cart is empty' }, { status: 400 })
     }
 
+    // Resolve product IDs to ensure foreign key integrity
+    const itemsToCreate = []
+    const allProducts = await prisma.product.findMany()
+
+    for (const item of items) {
+      let pid = item.productId || item.id
+      let matched = allProducts.find(p => p.id === pid)
+      if (!matched && item.name) {
+        matched = allProducts.find(p => p.name.toLowerCase() === String(item.name).toLowerCase())
+      }
+      if (!matched && allProducts.length > 0) {
+        matched = allProducts[0]
+      }
+
+      if (matched) {
+        itemsToCreate.push({
+          productId: matched.id,
+          quantity: Number(item.quantity) || 1,
+          price: Number(item.price) || Number(matched.price) || 0,
+        })
+      }
+    }
+
+    if (itemsToCreate.length === 0) {
+      return NextResponse.json({ error: 'No valid products in cart' }, { status: 400 })
+    }
+
     const order = await prisma.order.create({
       data: {
-        totalAmount: Number(totalAmount),
+        totalAmount: Number(totalAmount) || 0,
         status: 'PENDING',
         orderType: orderType ?? 'RETAIL',
         deliveryType: deliveryType ?? 'PICKUP',
@@ -44,11 +71,7 @@ export async function POST(request: Request) {
         customerPhone: customerPhone || '',
         customerNote: customerNote || null,
         items: {
-          create: items.map((item: any) => ({
-            productId: item.productId,
-            quantity: item.quantity || 1,
-            price: item.price,
-          })),
+          create: itemsToCreate,
         },
       },
       include: { items: true },

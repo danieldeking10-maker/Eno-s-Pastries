@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 
+export const dynamic = 'force-dynamic';
+
 const DEFAULT_PRODUCTS = [
   {
     name: "Meat Pie (Corned Beef Filling)",
@@ -78,7 +80,14 @@ const DEFAULT_PRODUCTS = [
 
 export async function GET() {
   try {
-    const products = await prisma.product.findMany();
+    let products = await prisma.product.findMany();
+
+    if (products.length === 0) {
+      await prisma.product.createMany({
+        data: DEFAULT_PRODUCTS,
+      });
+      products = await prisma.product.findMany();
+    }
 
     const formatted = products.map((p) => {
       let ingredients: string[] = []
