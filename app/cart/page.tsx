@@ -9,6 +9,7 @@ import { useCart } from '@/components/CartProvider'
 export default function CartPage() {
   const { cart, removeFromCart, clearCart, cartTotal } = useCart()
   const [showCheckout, setShowCheckout] = useState(false)
+  const [isProcessing, setIsProcessing] = useState(false)
   const [checkoutForm, setCheckoutForm] = useState({
     customerName: '',
     customerEmail: '',
@@ -22,6 +23,26 @@ export default function CartPage() {
 
   const handleCheckoutSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Validation
+    if (!checkoutForm.customerName.trim()) {
+      alert('Please enter your name')
+      return
+    }
+    if (!checkoutForm.customerEmail.trim()) {
+      alert('Please enter a valid email')
+      return
+    }
+    if (!checkoutForm.customerPhone.trim()) {
+      alert('Please enter a phone number')
+      return
+    }
+    if (checkoutForm.deliveryType === 'Delivery' && !checkoutForm.deliveryAddress.trim()) {
+      alert('Please enter a delivery address')
+      return
+    }
+
+    setIsProcessing(true)
 
     // Save customer info locally for convenient order tracking in user dashboard
     try {
@@ -72,8 +93,9 @@ export default function CartPage() {
         throw new Error('Payment link was not returned')
       }
     } catch (err: any) {
-      console.error(err)
+      console.error('Checkout error:', err)
       alert(err?.message || 'Could not start payment. Please try again.')
+      setIsProcessing(false)
     }
   }
 
@@ -92,7 +114,7 @@ export default function CartPage() {
             <div className="text-6xl mb-6">🛒</div>
             <h3 className="text-2xl font-semibold text-stone-800 mb-4">Your Cart is Empty</h3>
             <p className="text-lg text-stone-600 mb-8">Add some delicious pastries to get started!</p>
-            <Link href="/products" className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white px-8 py-3 rounded-full font-semibold shadow-lg hover:shadow-xl transition-all duration-300">
+            <Link href="/products" className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white px-8 py-3 rounded-full font-semibold shadow-lg hover:shadow-xl transition-all inline-block">
               Browse Products
             </Link>
           </div>
@@ -110,7 +132,8 @@ export default function CartPage() {
                   </div>
                   <button
                     onClick={() => removeFromCart(index)}
-                    className="w-12 h-12 bg-red-100 hover:bg-red-200 text-red-600 rounded-full flex items-center justify-center transition-all duration-300 hover:scale-110"
+                    disabled={isProcessing}
+                    className="w-12 h-12 bg-red-100 hover:bg-red-200 text-red-600 rounded-full flex items-center justify-center transition-all duration-300 hover:scale-110 disabled:opacity-50"
                   >
                     ✕
                   </button>
@@ -129,7 +152,7 @@ export default function CartPage() {
               {!showCheckout ? (
                 <button
                   onClick={() => setShowCheckout(true)}
-                  className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white py-4 rounded-full font-semibold text-lg shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300"
+                  className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white py-4 rounded-full font-semibold text-lg shadow-xl hover:shadow-2xl transition-all"
                 >
                   Proceed to Checkout
                 </button>
@@ -142,9 +165,10 @@ export default function CartPage() {
                       <input
                         type="text"
                         required
+                        disabled={isProcessing}
                         value={checkoutForm.customerName}
                         onChange={(e) => setCheckoutForm({ ...checkoutForm, customerName: e.target.value })}
-                        className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300"
+                        className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300 disabled:opacity-50"
                         placeholder="Enter your name"
                       />
                     </div>
@@ -153,9 +177,10 @@ export default function CartPage() {
                       <input
                         type="email"
                         required
+                        disabled={isProcessing}
                         value={checkoutForm.customerEmail}
                         onChange={(e) => setCheckoutForm({ ...checkoutForm, customerEmail: e.target.value })}
-                        className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300"
+                        className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300 disabled:opacity-50"
                         placeholder="your@email.com"
                       />
                     </div>
@@ -164,18 +189,20 @@ export default function CartPage() {
                       <input
                         type="tel"
                         required
+                        disabled={isProcessing}
                         value={checkoutForm.customerPhone}
                         onChange={(e) => setCheckoutForm({ ...checkoutForm, customerPhone: e.target.value })}
-                        className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300"
+                        className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300 disabled:opacity-50"
                         placeholder="0534716125"
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-stone-700 mb-2">Order Type</label>
                       <select
+                        disabled={isProcessing}
                         value={checkoutForm.orderType}
                         onChange={(e) => setCheckoutForm({ ...checkoutForm, orderType: e.target.value })}
-                        className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300"
+                        className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300 disabled:opacity-50"
                       >
                         <option value="Retail">Retail</option>
                         <option value="Wholesale">Wholesale</option>
@@ -184,9 +211,10 @@ export default function CartPage() {
                     <div>
                       <label className="block text-sm font-medium text-stone-700 mb-2">Delivery Type</label>
                       <select
+                        disabled={isProcessing}
                         value={checkoutForm.deliveryType}
                         onChange={(e) => setCheckoutForm({ ...checkoutForm, deliveryType: e.target.value })}
-                        className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300"
+                        className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300 disabled:opacity-50"
                       >
                         <option value="Pickup">Pickup</option>
                         <option value="Delivery">Delivery</option>
@@ -198,9 +226,10 @@ export default function CartPage() {
                         <input
                           type="text"
                           required
+                          disabled={isProcessing}
                           value={checkoutForm.deliveryAddress}
                           onChange={(e) => setCheckoutForm({ ...checkoutForm, deliveryAddress: e.target.value })}
-                          className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300"
+                          className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300 disabled:opacity-50"
                           placeholder="Enter your address"
                         />
                       </div>
@@ -209,9 +238,10 @@ export default function CartPage() {
                       <label className="block text-sm font-medium text-stone-700 mb-2">Preferred Date & Time</label>
                       <input
                         type="datetime-local"
+                        disabled={isProcessing}
                         value={checkoutForm.deliveryDate}
                         onChange={(e) => setCheckoutForm({ ...checkoutForm, deliveryDate: e.target.value })}
-                        className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300"
+                        className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300 disabled:opacity-50"
                       />
                     </div>
                     <div className="md:col-span-2">
@@ -220,9 +250,10 @@ export default function CartPage() {
                       </label>
                       <textarea
                         rows={3}
+                        disabled={isProcessing}
                         value={checkoutForm.customerNote}
                         onChange={(e) => setCheckoutForm({ ...checkoutForm, customerNote: e.target.value })}
-                        className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300 resize-none"
+                        className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300 resize-none disabled:opacity-50"
                         placeholder="Add special instructions (e.g., allergies, delivery preferences, custom messages)"
                       />
                     </div>
@@ -231,15 +262,17 @@ export default function CartPage() {
                     <button
                       type="button"
                       onClick={() => setShowCheckout(false)}
-                      className="flex-1 border-2 border-amber-600 text-amber-700 hover:bg-amber-100 py-4 rounded-full font-semibold transition-all duration-300"
+                      disabled={isProcessing}
+                      className="flex-1 border-2 border-amber-600 text-amber-700 hover:bg-amber-100 py-4 rounded-full font-semibold transition-all duration-300 disabled:opacity-50"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="flex-1 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white py-4 rounded-full font-semibold shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300"
+                      disabled={isProcessing}
+                      className="flex-1 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white py-4 rounded-full font-semibold shadow-xl hover:shadow-2xl transition-all disabled:opacity-50"
                     >
-                      Place Order 🎉
+                      {isProcessing ? 'Processing...' : 'Place Order 🎉'}
                     </button>
                   </div>
                 </form>
