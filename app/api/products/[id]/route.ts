@@ -72,6 +72,23 @@ export async function PUT(
     } catch {
       ingredients = []
     }
+
+    // Mirror update to Supabase
+    try {
+      const { supabase } = await import('@/lib/supabase');
+      await supabase.from('products').update({
+        name: product.name,
+        description: product.description,
+        price: Number(product.price),
+        imageUrl: product.imageUrl,
+        category: product.category,
+        ingredients,
+        available: product.available,
+      }).eq('id', id);
+    } catch (e) {
+      console.warn('Supabase product update error:', e);
+    }
+
     return NextResponse.json({ ...product, price: Number(product.price), ingredients });
   } catch (error) {
     console.error('Error updating product:', error);
@@ -98,6 +115,14 @@ export async function DELETE(
     await prisma.product.delete({
       where: { id },
     });
+
+    // Mirror delete to Supabase
+    try {
+      const { supabase } = await import('@/lib/supabase');
+      await supabase.from('products').delete().eq('id', id);
+    } catch (e) {
+      console.warn('Supabase product delete error:', e);
+    }
 
     return NextResponse.json({ message: 'Product deleted permanently' });
   } catch (error) {

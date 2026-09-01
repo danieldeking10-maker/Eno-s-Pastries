@@ -30,34 +30,36 @@ export async function checkSupabaseStatus() {
 }
 
 /**
- * Fetch products: tries Supabase first if tables are ready, otherwise falls back to local database.
+ * Fetch products: queries Supabase first, otherwise falls back to local database.
  */
 export async function getProducts(): Promise<ProductRecord[]> {
   try {
     const { data, error } = await supabase
       .from('products')
       .select('*')
-      .order('createdAt', { ascending: true })
 
     if (!error && Array.isArray(data) && data.length > 0) {
       return data.map((p) => {
+        const img = p.imageUrl || p.imageurl || null
+        const cat = p.category || 'Pastry'
+        const rawIng = p.ingredients
         let ingredients: string[] = []
         try {
-          ingredients = typeof p.ingredients === 'string' ? JSON.parse(p.ingredients) : (Array.isArray(p.ingredients) ? p.ingredients : [])
+          ingredients = typeof rawIng === 'string' ? JSON.parse(rawIng) : (Array.isArray(rawIng) ? rawIng : [])
         } catch {
-          ingredients = p.ingredients ? String(p.ingredients).split(',').map((s: string) => s.trim()) : []
+          ingredients = rawIng ? String(rawIng).split(',').map((s: string) => s.trim()) : []
         }
         return {
           id: p.id,
           name: p.name,
           description: p.description || '',
           price: Number(p.price),
-          imageUrl: p.imageUrl || null,
-          category: p.category || 'Pastry',
+          imageUrl: img,
+          category: cat,
           ingredients,
           available: p.available ?? true,
-          createdAt: p.createdAt,
-          updatedAt: p.updatedAt,
+          createdAt: p.createdAt || p.createdat,
+          updatedAt: p.updatedAt || p.updatedat,
         }
       })
     }
@@ -93,7 +95,7 @@ export async function getProducts(): Promise<ProductRecord[]> {
 }
 
 /**
- * Save order to Supabase and local DB
+ * Save order to Supabase
  */
 export async function saveOrderToSupabase(orderData: any, orderItems: any[]) {
   try {
@@ -101,6 +103,7 @@ export async function saveOrderToSupabase(orderData: any, orderItems: any[]) {
       .from('orders')
       .insert({
         id: orderData.id,
+        userId: orderData.userId || null,
         totalAmount: orderData.totalAmount,
         status: orderData.status || 'PENDING',
         orderType: orderData.orderType || 'RETAIL',
