@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import Header from '@/components/Header'
 import DeliveryClusterMap from '@/components/DeliveryClusterMap'
+import SupabaseSyncBanner from '@/components/SupabaseSyncBanner'
 import { Package, ShoppingBag, BarChart2, QrCode, Truck, Sparkles } from 'lucide-react'
 
 export default function AdminDashboard() {
@@ -34,6 +35,9 @@ export default function AdminDashboard() {
             </Link>
           </div>
         </div>
+
+        {/* Supabase Database Connection & Sync Status */}
+        <SupabaseSyncBanner />
 
         {/* Quick Admin Navigation Hub */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

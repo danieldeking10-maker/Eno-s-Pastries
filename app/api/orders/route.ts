@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { saveOrderToSupabase } from '@/lib/supabase-service';
 
 export async function GET(request: Request) {
   try {
@@ -103,6 +104,14 @@ export async function POST(request: Request) {
       },
       include: { items: { include: { product: true } } },
     });
+
+    // Mirror to Supabase if available
+    try {
+      await saveOrderToSupabase(order, itemsToCreate);
+    } catch (e) {
+      console.warn('Supabase order mirror error:', e);
+    }
+
     return NextResponse.json(order, { status: 201 });
   } catch (error) {
     console.error('Error creating order:', error);

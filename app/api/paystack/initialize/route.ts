@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import crypto from 'crypto'
+import { saveOrderToSupabase } from '@/lib/supabase-service'
 
 function ghp(amount: number) {
   // Paystack expects amount in minor units (kobo/pesewas)
@@ -76,6 +77,13 @@ export async function POST(request: Request) {
       },
       include: { items: true },
     })
+
+    // Mirror to Supabase if table is ready
+    try {
+      await saveOrderToSupabase(order, itemsToCreate)
+    } catch (e) {
+      console.warn('Supabase sync skipped:', e)
+    }
 
     const reference = `order_${order.id}_${crypto.randomBytes(4).toString('hex')}`
 
