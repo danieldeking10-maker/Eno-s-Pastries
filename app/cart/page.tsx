@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import Header from '@/components/Header'
 import { Product } from '@/components/ProductCard'
@@ -102,7 +103,17 @@ export default function CartPage() {
               {cart.map((item, index) => (
                 <div key={index} className="glassmorphism rounded-2xl p-6 shadow-lg flex items-center gap-6 animate-fade-in-up" style={{ animationDelay: `${index * 0.1}s` }}>
                   {item.imageUrl && (
-                    <img src={item.imageUrl} alt={item.name} className="w-24 h-24 object-cover rounded-xl" />
+                    <div className="relative w-24 h-24 shrink-0 overflow-hidden rounded-xl bg-stone-100">
+                      <Image
+                        src={item.imageUrl}
+                        alt={item.name}
+                        fill
+                        sizes="96px"
+                        className="object-cover"
+                        referrerPolicy="no-referrer"
+                        unoptimized={item.imageUrl.startsWith('data:')}
+                      />
+                    </div>
                   )}
                   <div className="flex-1">
                     <h4 className="text-xl font-semibold text-stone-800 mb-1">{item.name}</h4>

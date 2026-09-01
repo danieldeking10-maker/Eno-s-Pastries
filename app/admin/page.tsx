@@ -8,7 +8,7 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-amber-50/70 pb-16">
       <Header />
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 space-y-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 sm:pt-28 pb-10 space-y-8">
         {/* Welcome Banner */}
         <div className="bg-gradient-to-r from-amber-950 via-amber-900 to-orange-950 rounded-3xl p-6 sm:p-8 text-white shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6 border border-amber-800/80">
           <div>

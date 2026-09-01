@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
+import Image from 'next/image'
 import Header from '@/components/Header'
 import Link from 'next/link'
 import { useCart } from '@/components/CartProvider'
@@ -912,11 +913,17 @@ export default function UserDashboardPage() {
                             <div key={idx} className="py-3 flex items-center justify-between text-sm">
                               <div className="flex items-center gap-3">
                                 {item.product?.imageUrl && (
-                                  <img
-                                    src={item.product.imageUrl}
-                                    alt={item.product.name}
-                                    className="w-10 h-10 object-cover rounded-lg"
-                                  />
+                                  <div className="relative w-10 h-10 shrink-0 overflow-hidden rounded-lg bg-stone-100">
+                                    <Image
+                                      src={item.product.imageUrl}
+                                      alt={item.product.name}
+                                      fill
+                                      sizes="40px"
+                                      className="object-cover"
+                                      referrerPolicy="no-referrer"
+                                      unoptimized={item.product.imageUrl.startsWith('data:')}
+                                    />
+                                  </div>
                                 )}
                                 <div>
                                   <p className="font-semibold text-stone-800">

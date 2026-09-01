@@ -1,3 +1,5 @@
+import Image from 'next/image'
+
 export interface Product {
   id: string
   name: string
@@ -28,16 +30,24 @@ export default function ProductCard({ product, onAddToCart, index = 0 }: Product
       } animate-fade-in-up`}
       style={{ animationDelay: `${index * 0.1}s` }}
     >
-      <div className="relative overflow-hidden">
-        {product.imageUrl && (
-          <img
+      <div className="relative overflow-hidden h-56 w-full bg-stone-100">
+        {product.imageUrl ? (
+          <Image
             src={product.imageUrl}
             alt={product.name || 'Product'}
-            className="w-full h-56 object-cover transition-transform duration-500 hover:scale-105"
+            fill
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            className="object-cover transition-transform duration-500 hover:scale-105"
+            referrerPolicy="no-referrer"
+            unoptimized={product.imageUrl.startsWith('data:')}
           />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-amber-900/30 text-4xl">
+            🥐
+          </div>
         )}
         {product.bestseller && (
-          <div className="absolute top-4 left-4 bg-gradient-to-r from-amber-600 to-orange-600 text-white px-4 py-1 rounded-full text-sm font-semibold shadow-lg">
+          <div className="absolute top-4 left-4 z-10 bg-gradient-to-r from-amber-600 to-orange-600 text-white px-4 py-1 rounded-full text-sm font-semibold shadow-lg">
             Best Seller
           </div>
         )}

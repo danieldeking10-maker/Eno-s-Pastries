@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef, useCallback } from 'react'
+import Image from 'next/image'
 import Header from '@/components/Header'
 import Link from 'next/link'
 import {
@@ -134,7 +135,7 @@ export default function AdminProductsPage() {
       const src = event.target?.result as string
       if (!src) return
 
-      const img = new Image()
+      const img = new window.Image()
       img.onload = () => {
         const MAX_DIM = 1000
         let width = img.width
@@ -354,7 +355,7 @@ export default function AdminProductsPage() {
     <div className="min-h-screen bg-amber-50">
       <Header />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 sm:pt-28 pb-10">
         {/* Navigation & Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
@@ -618,11 +619,16 @@ export default function AdminProductsPage() {
                               : 'border-stone-200 hover:border-amber-400'
                           }`}
                         >
-                          <img
-                            src={photo.url}
-                            alt={photo.label}
-                            className="w-full h-20 object-cover group-hover:scale-105 transition-transform"
-                          />
+                          <div className="relative w-full h-20 bg-stone-100">
+                            <Image
+                              src={photo.url}
+                              alt={photo.label}
+                              fill
+                              sizes="(max-width: 640px) 50vw, 25vw"
+                              className="object-cover group-hover:scale-105 transition-transform"
+                              referrerPolicy="no-referrer"
+                            />
+                          </div>
                           <span className="block p-1.5 text-[11px] font-bold text-stone-800 bg-white/95 truncate">
                             {photo.label}
                           </span>
@@ -648,11 +654,17 @@ export default function AdminProductsPage() {
                   {/* Image Live Preview */}
                   {formData.imageUrl && (
                     <div className="mt-4 flex items-center gap-4 bg-white p-3 rounded-2xl border border-stone-200">
-                      <img
-                        src={formData.imageUrl}
-                        alt="Preview"
-                        className="w-20 h-20 object-cover rounded-xl border border-stone-200 shrink-0 bg-stone-100"
-                      />
+                      <div className="relative w-20 h-20 rounded-xl overflow-hidden border border-stone-200 shrink-0 bg-stone-100">
+                        <Image
+                          src={formData.imageUrl}
+                          alt="Preview"
+                          fill
+                          sizes="80px"
+                          className="object-cover"
+                          referrerPolicy="no-referrer"
+                          unoptimized={formData.imageUrl.startsWith('data:')}
+                        />
+                      </div>
                       <div className="flex-1 overflow-hidden">
                         <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full">
                           Image Attached & Ready
@@ -798,10 +810,14 @@ export default function AdminProductsPage() {
                 {/* Product Image */}
                 <div className="relative h-48 bg-stone-100 overflow-hidden">
                   {product.imageUrl ? (
-                    <img
+                    <Image
                       src={product.imageUrl}
                       alt={product.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      fill
+                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+                      className="object-cover group-hover:scale-105 transition-transform duration-300"
+                      referrerPolicy="no-referrer"
+                      unoptimized={product.imageUrl.startsWith('data:')}
                     />
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center text-stone-400">
