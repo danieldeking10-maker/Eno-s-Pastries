@@ -160,6 +160,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Top Right Admin Navigation Links */}
         <div className="flex items-center gap-2 flex-wrap">
           <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 bg-amber-900/40 hover:bg-amber-900 text-amber-300 hover:text-white px-2.5 py-1 rounded-lg text-xs font-bold transition-colors border border-amber-800/40"
+            title="Go to Customer Storefront"
+          >
+            <span>🥐</span>
+            <span>Shop</span>
+          </Link>
+
+          <Link
             href="/admin"
             className="inline-flex items-center gap-1.5 bg-amber-900/60 hover:bg-amber-900 text-amber-200 hover:text-white px-2.5 py-1 rounded-lg text-xs font-bold transition-colors border border-amber-800/60"
             title="Admin Dashboard Overview"

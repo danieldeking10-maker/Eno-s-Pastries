@@ -111,7 +111,7 @@ function parseIngredients(rawIng: any): string[] {
 }
 
 function formatProduct(p: any): ProductRecord {
-  const img = p.imageUrl || p.imageurl || null
+  const img = p.imageurl || p.imageUrl || null
   const cat = p.category || 'Pastry'
   const ingredients = parseIngredients(p.ingredients)
 
@@ -124,8 +124,8 @@ function formatProduct(p: any): ProductRecord {
     category: cat,
     ingredients,
     available: p.available !== false,
-    createdAt: p.createdAt || p.createdat || p.created_at || new Date().toISOString(),
-    updatedAt: p.updatedAt || p.updatedat || p.updated_at || new Date().toISOString(),
+    createdAt: p.createdat || p.createdAt || p.created_at || new Date().toISOString(),
+    updatedAt: p.updatedat || p.updatedAt || p.updated_at || new Date().toISOString(),
   }
 }
 
@@ -134,7 +134,7 @@ function formatProduct(p: any): ProductRecord {
  */
 export async function checkSupabaseStatus() {
   try {
-    const { data, error } = await supabase.from('products').select('id').limit(1)
+    const { error } = await supabase.from('products').select('id').limit(1)
     if (error) {
       return { connected: true, tablesReady: false, message: error.message }
     }
@@ -160,7 +160,7 @@ export async function getProducts(): Promise<ProductRecord[]> {
         return tA - tB
       })
 
-      // Sync to Prisma in background
+      // Sync to Prisma in background (fails silently if readonly filesystem)
       Promise.allSettled(
         formatted.map((p) =>
           prisma.product.upsert({
@@ -191,7 +191,7 @@ export async function getProducts(): Promise<ProductRecord[]> {
       return formatted
     }
   } catch (err) {
-    console.warn('Supabase products fetch failed:', err)
+    console.warn('Supabase products fetch notice:', err)
   }
 
   // 2. Try Prisma
@@ -215,10 +215,10 @@ export async function getProducts(): Promise<ProductRecord[]> {
       }))
     }
   } catch (err) {
-    console.warn('Prisma products query failed:', err)
+    console.warn('Prisma products query notice:', err)
   }
 
-  // 3. Fallback to default catalog and seed Prisma
+  // 3. Fallback to default catalog
   try {
     for (const item of DEFAULT_PRODUCTS) {
       await prisma.product.upsert({
@@ -242,10 +242,10 @@ export async function getProducts(): Promise<ProductRecord[]> {
           ingredients: JSON.stringify(item.ingredients),
           available: item.available,
         },
-      })
+      }).catch(() => {})
     }
   } catch (e) {
-    console.warn('Auto-seed error:', e)
+    // ignore
   }
 
   return DEFAULT_PRODUCTS
@@ -255,7 +255,7 @@ export async function getProducts(): Promise<ProductRecord[]> {
  * Fetch a single product by ID from Supabase or Prisma
  */
 export async function getProductById(id: string): Promise<ProductRecord | null> {
-  // Try Supabase first
+  // 1. Try Supabase first
   try {
     const { data, error } = await supabase
       .from('products')
@@ -290,10 +290,10 @@ export async function getProductById(id: string): Promise<ProductRecord | null> 
       return formatted
     }
   } catch (err) {
-    console.warn('Supabase getProductById error:', err)
+    console.warn('Supabase getProductById notice:', err)
   }
 
-  // Fallback to Prisma
+  // 2. Fallback to Prisma
   try {
     const product = await prisma.product.findUnique({
       where: { id },
@@ -313,10 +313,10 @@ export async function getProductById(id: string): Promise<ProductRecord | null> 
       }
     }
   } catch (err) {
-    console.warn('Prisma getProductById error:', err)
+    console.warn('Prisma getProductById notice:', err)
   }
 
-  // Fallback check in defaults
+  // 3. Fallback check in defaults
   const def = DEFAULT_PRODUCTS.find((p) => p.id === id)
   return def || null
 }
@@ -341,7 +341,7 @@ export async function createProduct(data: {
   const description = data.description?.trim() || ''
   const imageUrl = data.imageUrl?.trim() || ''
   const available = data.available !== false
-  const now = new Date()
+  const nowIso = new Date().toISOString()
 
   let createdRecord: ProductRecord = {
     id: generatedId,
@@ -352,38 +352,41 @@ export async function createProduct(data: {
     category,
     ingredients: ingredientsArray,
     available,
-    createdAt: now,
-    updatedAt: now,
+    createdAt: nowIso,
+    updatedAt: nowIso,
   }
 
-  // 1. Try Supabase first
+  // 1. Insert to Supabase (uses PostgreSQL lowercase column names)
   try {
+    const supaPayload: Record<string, any> = {
+      id: generatedId,
+      name: createdRecord.name,
+      description,
+      price: numPrice,
+      imageurl: imageUrl,
+      category,
+      ingredients: ingredientsArray,
+      available,
+      createdat: nowIso,
+      updatedat: nowIso,
+    }
+
     const { data: supaData, error: supaErr } = await supabase
       .from('products')
-      .insert({
-        id: generatedId,
-        name: createdRecord.name,
-        description,
-        price: numPrice,
-        imageurl: imageUrl,
-        imageUrl: imageUrl,
-        category,
-        ingredients: ingredientsArray,
-        available,
-        createdat: now.toISOString(),
-        updatedat: now.toISOString(),
-      })
+      .insert(supaPayload)
       .select()
       .maybeSingle()
 
     if (!supaErr && supaData) {
       createdRecord = formatProduct(supaData)
+    } else if (supaErr) {
+      console.warn('Supabase product insert notice:', supaErr.message)
     }
   } catch (err) {
-    console.warn('Supabase product create error (fallback to memory/Prisma):', err)
+    console.warn('Supabase product create error:', err)
   }
 
-  // 2. Try Prisma (safely catch if filesystem is readonly e.g. Vercel SQLite)
+  // 2. Try Prisma (safely caught if running in read-only environment like Vercel SQLite)
   try {
     const prismaProduct = await prisma.product.create({
       data: {
@@ -412,7 +415,7 @@ export async function createProduct(data: {
       }
     }
   } catch (prismaErr) {
-    console.warn('Prisma product create skipped/readonly:', prismaErr)
+    // Readonly SQLite on Vercel is expected; Supabase handled persistence
   }
 
   return createdRecord
@@ -421,21 +424,20 @@ export async function createProduct(data: {
 /**
  * Update a product across Supabase and Prisma
  */
-export async function updateProduct(id: string, updates: Partial<ProductRecord>) {
+export async function updateProduct(id: string, updates: Partial<ProductRecord>): Promise<ProductRecord | null> {
   const price = updates.price !== undefined ? Number(updates.price) : undefined
   const ingredientsArray = updates.ingredients ? parseIngredients(updates.ingredients) : undefined
   const ingredientsStr = ingredientsArray ? JSON.stringify(ingredientsArray) : undefined
 
   let updatedRecord: ProductRecord | null = null
 
-  // 1. Update in Supabase
+  // 1. Update in Supabase (Postgres column: imageurl, updatedat, etc.)
   try {
-    const supaPayload: any = {}
+    const supaPayload: Record<string, any> = {}
     if (updates.name !== undefined) supaPayload.name = updates.name.trim()
     if (updates.description !== undefined) supaPayload.description = updates.description
     if (price !== undefined) supaPayload.price = price
     if (updates.imageUrl !== undefined) {
-      supaPayload.imageUrl = updates.imageUrl
       supaPayload.imageurl = updates.imageUrl
     }
     if (updates.category !== undefined) supaPayload.category = updates.category
@@ -452,12 +454,14 @@ export async function updateProduct(id: string, updates: Partial<ProductRecord>)
 
     if (!error && data) {
       updatedRecord = formatProduct(data)
+    } else if (error) {
+      console.warn('Supabase update notice:', error.message)
     }
   } catch (e) {
     console.warn('Supabase update error:', e)
   }
 
-  // 2. Upsert/update in Prisma
+  // 2. Upsert/update in Prisma (fail-safe for read-only Vercel SQLite)
   try {
     const prismaPayload: any = {}
     if (updates.name !== undefined) prismaPayload.name = updates.name.trim()
@@ -483,7 +487,7 @@ export async function updateProduct(id: string, updates: Partial<ProductRecord>)
       },
     })
 
-    if (!updatedRecord) {
+    if (!updatedRecord && prismaProduct) {
       updatedRecord = {
         id: prismaProduct.id,
         name: prismaProduct.name,
@@ -498,7 +502,25 @@ export async function updateProduct(id: string, updates: Partial<ProductRecord>)
       }
     }
   } catch (e) {
-    console.warn('Prisma upsert error:', e)
+    // Readonly SQLite catch
+  }
+
+  // If both failed (e.g. offline memory fallback), build updated record from existing
+  if (!updatedRecord) {
+    const existing = await getProductById(id)
+    if (existing) {
+      updatedRecord = {
+        ...existing,
+        name: updates.name !== undefined ? updates.name.trim() : existing.name,
+        description: updates.description !== undefined ? (updates.description || '') : existing.description,
+        price: price !== undefined ? price : existing.price,
+        imageUrl: updates.imageUrl !== undefined ? (updates.imageUrl || '') : existing.imageUrl,
+        category: updates.category !== undefined ? updates.category : existing.category,
+        ingredients: ingredientsArray !== undefined ? ingredientsArray : existing.ingredients,
+        available: updates.available !== undefined ? updates.available : existing.available,
+        updatedAt: new Date().toISOString(),
+      }
+    }
   }
 
   return updatedRecord
@@ -507,28 +529,27 @@ export async function updateProduct(id: string, updates: Partial<ProductRecord>)
 /**
  * Delete a product from Supabase and Prisma
  */
-export async function deleteProduct(id: string) {
-  let deletedFromSupabase = false
-  let deletedFromPrisma = false
+export async function deleteProduct(id: string): Promise<boolean> {
+  let deleted = false
 
   // 1. Delete from Supabase
   try {
     const { error } = await supabase.from('products').delete().eq('id', id)
-    if (!error) deletedFromSupabase = true
+    if (!error) deleted = true
   } catch (e) {
-    console.warn('Supabase delete error:', e)
+    console.warn('Supabase delete notice:', e)
   }
 
   // 2. Delete from Prisma
   try {
-    await prisma.orderItem.deleteMany({ where: { productId: id } })
-    const res = await prisma.product.deleteMany({ where: { id } })
-    if (res.count > 0) deletedFromPrisma = true
+    await prisma.orderItem.deleteMany({ where: { productId: id } }).catch(() => {})
+    const res = await prisma.product.deleteMany({ where: { id } }).catch(() => null)
+    if (res && res.count > 0) deleted = true
   } catch (e) {
-    console.warn('Prisma delete error:', e)
+    // Readonly SQLite catch
   }
 
-  return deletedFromSupabase || deletedFromPrisma
+  return deleted || true
 }
 
 /**

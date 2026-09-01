@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import Image from 'next/image'
-import Header from '@/components/Header'
 import Link from 'next/link'
 import {
   Plus,
@@ -135,7 +134,7 @@ export default function AdminProductsPage() {
       const src = event.target?.result as string
       if (!src) return
 
-      const img = new window.Image()
+      const img = document.createElement('img')
       img.onload = () => {
         const MAX_DIM = 1000
         let width = img.width
@@ -353,9 +352,7 @@ export default function AdminProductsPage() {
 
   return (
     <div className="min-h-screen bg-amber-50">
-      <Header />
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 sm:pt-28 pb-10">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         {/* Navigation & Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
@@ -655,15 +652,22 @@ export default function AdminProductsPage() {
                   {formData.imageUrl && (
                     <div className="mt-4 flex items-center gap-4 bg-white p-3 rounded-2xl border border-stone-200">
                       <div className="relative w-20 h-20 rounded-xl overflow-hidden border border-stone-200 shrink-0 bg-stone-100">
-                        <Image
-                          src={formData.imageUrl}
-                          alt="Preview"
-                          fill
-                          sizes="80px"
-                          className="object-cover"
-                          referrerPolicy="no-referrer"
-                          unoptimized={formData.imageUrl.startsWith('data:')}
-                        />
+                        {formData.imageUrl.startsWith('data:') ? (
+                          <img
+                            src={formData.imageUrl}
+                            alt="Preview"
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <Image
+                            src={formData.imageUrl}
+                            alt="Preview"
+                            fill
+                            sizes="80px"
+                            className="object-cover"
+                            referrerPolicy="no-referrer"
+                          />
+                        )}
                       </div>
                       <div className="flex-1 overflow-hidden">
                         <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full">
@@ -810,15 +814,22 @@ export default function AdminProductsPage() {
                 {/* Product Image */}
                 <div className="relative h-48 bg-stone-100 overflow-hidden">
                   {product.imageUrl ? (
-                    <Image
-                      src={product.imageUrl}
-                      alt={product.name}
-                      fill
-                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
-                      className="object-cover group-hover:scale-105 transition-transform duration-300"
-                      referrerPolicy="no-referrer"
-                      unoptimized={product.imageUrl.startsWith('data:')}
-                    />
+                    product.imageUrl.startsWith('data:') ? (
+                      <img
+                        src={product.imageUrl}
+                        alt={product.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    ) : (
+                      <Image
+                        src={product.imageUrl}
+                        alt={product.name}
+                        fill
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+                        className="object-cover group-hover:scale-105 transition-transform duration-300"
+                        referrerPolicy="no-referrer"
+                      />
+                    )
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center text-stone-400">
                       <ImageIcon className="w-10 h-10 mb-1" />

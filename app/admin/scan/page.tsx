@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useRef, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import Header from '@/components/Header'
 import Link from 'next/link'
 import {
   QrCode,
@@ -413,8 +412,7 @@ function AdminScanContent() {
 
 export default function AdminScanPage() {
   return (
-    <div className="min-h-screen bg-amber-50">
-      <Header />
+    <div className="min-h-screen bg-amber-50 py-6 sm:py-8">
       <Suspense fallback={<div className="text-center py-20 text-stone-600">Loading scanner...</div>}>
         <AdminScanContent />
       </Suspense>

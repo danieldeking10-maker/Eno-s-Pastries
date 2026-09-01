@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import Header from '@/components/Header'
 import Link from 'next/link'
 import { Printer, X, QrCode } from 'lucide-react'
 
@@ -135,8 +134,7 @@ export default function AdminOrdersPage() {
   return (
     <div className="min-h-screen bg-amber-50">
       <div className="print:hidden">
-        <Header />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 sm:pt-28 pb-12">
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
           <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h1 className="text-3xl font-bold text-amber-900">Manage Orders</h1>
