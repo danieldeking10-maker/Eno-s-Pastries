@@ -136,7 +136,7 @@ export default function AdminProductsPage() {
 
       const img = document.createElement('img')
       img.onload = () => {
-        const MAX_DIM = 1000
+        const MAX_DIM = 800
         let width = img.width
         let height = img.height
 
@@ -163,7 +163,11 @@ export default function AdminProductsPage() {
         }
 
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.85)
+        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.78)
+        if (compressedBase64.length > 2_000_000) {
+          showToast('error', 'Image is still too large after compression. Please choose a smaller image.')
+          return
+        }
         setFormData((prev) => ({ ...prev, imageUrl: compressedBase64 }))
         showToast('success', 'Image optimized and uploaded successfully!')
       }

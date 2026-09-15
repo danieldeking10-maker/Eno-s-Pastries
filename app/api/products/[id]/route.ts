@@ -3,6 +3,8 @@ import { getProductById, updateProduct, deleteProduct } from '@/lib/supabase-ser
 
 export const dynamic = 'force-dynamic';
 
+const MAX_IMAGE_URL_LENGTH = 2_000_000;
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -28,7 +30,21 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const body = await request.json().catch(() => ({}));
+    const body: unknown = await request.json().catch(() => null);
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return NextResponse.json({ error: 'A product update payload is required' }, { status: 400 });
+    }
+
+    const updates = body as Record<string, unknown>;
+    if (updates.imageUrl !== undefined && String(updates.imageUrl).length > MAX_IMAGE_URL_LENGTH) {
+      return NextResponse.json({ error: 'Product image is too large. Please use a smaller image.' }, { status: 413 });
+    }
+    if (updates.price !== undefined) {
+      const price = Number(updates.price);
+      if (!Number.isFinite(price) || price < 0) {
+        return NextResponse.json({ error: 'Price must be a valid non-negative number' }, { status: 400 });
+      }
+    }
 
     // Verify product existence first
     const existing = await getProductById(id);
@@ -36,7 +52,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Product not found' }, { status: 404 });
     }
 
-    const updated = await updateProduct(id, body);
+    const updated = await updateProduct(id, updates);
     if (!updated) {
       return NextResponse.json({ error: 'Failed to update product' }, { status: 500 });
     }

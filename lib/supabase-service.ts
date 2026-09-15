@@ -426,21 +426,25 @@ export async function createProduct(data: {
  */
 export async function updateProduct(id: string, updates: Partial<ProductRecord>): Promise<ProductRecord | null> {
   const price = updates.price !== undefined ? Number(updates.price) : undefined
-  const ingredientsArray = updates.ingredients ? parseIngredients(updates.ingredients) : undefined
+  const ingredientsArray = updates.ingredients !== undefined ? parseIngredients(updates.ingredients) : undefined
   const ingredientsStr = ingredientsArray ? JSON.stringify(ingredientsArray) : undefined
+  const name = updates.name !== undefined ? String(updates.name).trim() : undefined
+  const description = updates.description !== undefined ? String(updates.description || '') : undefined
+  const imageUrl = updates.imageUrl !== undefined ? String(updates.imageUrl || '').trim() : undefined
+  const category = updates.category !== undefined ? String(updates.category).trim() || 'Pastry' : undefined
 
   let updatedRecord: ProductRecord | null = null
 
   // 1. Update in Supabase (Postgres column: imageurl, updatedat, etc.)
   try {
     const supaPayload: Record<string, any> = {}
-    if (updates.name !== undefined) supaPayload.name = updates.name.trim()
-    if (updates.description !== undefined) supaPayload.description = updates.description
+    if (name !== undefined) supaPayload.name = name
+    if (description !== undefined) supaPayload.description = description
     if (price !== undefined) supaPayload.price = price
-    if (updates.imageUrl !== undefined) {
-      supaPayload.imageurl = updates.imageUrl
+    if (imageUrl !== undefined) {
+      supaPayload.imageurl = imageUrl
     }
-    if (updates.category !== undefined) supaPayload.category = updates.category
+    if (category !== undefined) supaPayload.category = category
     if (ingredientsArray !== undefined) supaPayload.ingredients = ingredientsArray
     if (updates.available !== undefined) supaPayload.available = updates.available
     supaPayload.updatedat = new Date().toISOString()
@@ -464,11 +468,11 @@ export async function updateProduct(id: string, updates: Partial<ProductRecord>)
   // 2. Upsert/update in Prisma (fail-safe for read-only Vercel SQLite)
   try {
     const prismaPayload: any = {}
-    if (updates.name !== undefined) prismaPayload.name = updates.name.trim()
-    if (updates.description !== undefined) prismaPayload.description = updates.description || ''
+    if (name !== undefined) prismaPayload.name = name
+    if (description !== undefined) prismaPayload.description = description
     if (price !== undefined) prismaPayload.price = price
-    if (updates.imageUrl !== undefined) prismaPayload.imageUrl = updates.imageUrl || ''
-    if (updates.category !== undefined) prismaPayload.category = updates.category
+    if (imageUrl !== undefined) prismaPayload.imageUrl = imageUrl
+    if (category !== undefined) prismaPayload.category = category
     if (ingredientsStr !== undefined) prismaPayload.ingredients = ingredientsStr
     if (updates.available !== undefined) prismaPayload.available = updates.available
 
@@ -477,11 +481,11 @@ export async function updateProduct(id: string, updates: Partial<ProductRecord>)
       update: prismaPayload,
       create: {
         id,
-        name: updates.name?.trim() || 'Bakery Item',
-        description: updates.description || '',
+        name: name || 'Bakery Item',
+        description: description || '',
         price: price || 0,
-        imageUrl: updates.imageUrl || '',
-        category: updates.category || 'Pastry',
+        imageUrl: imageUrl || '',
+        category: category || 'Pastry',
         ingredients: ingredientsStr || '[]',
         available: updates.available !== false,
       },
@@ -511,11 +515,11 @@ export async function updateProduct(id: string, updates: Partial<ProductRecord>)
     if (existing) {
       updatedRecord = {
         ...existing,
-        name: updates.name !== undefined ? updates.name.trim() : existing.name,
-        description: updates.description !== undefined ? (updates.description || '') : existing.description,
+        name: name !== undefined ? name : existing.name,
+        description: description !== undefined ? description : existing.description,
         price: price !== undefined ? price : existing.price,
-        imageUrl: updates.imageUrl !== undefined ? (updates.imageUrl || '') : existing.imageUrl,
-        category: updates.category !== undefined ? updates.category : existing.category,
+        imageUrl: imageUrl !== undefined ? imageUrl : existing.imageUrl,
+        category: category !== undefined ? category : existing.category,
         ingredients: ingredientsArray !== undefined ? ingredientsArray : existing.ingredients,
         available: updates.available !== undefined ? updates.available : existing.available,
         updatedAt: new Date().toISOString(),
