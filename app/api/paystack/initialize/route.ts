@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import crypto from 'crypto'
-import { saveOrderToSupabase } from '@/lib/supabase-service'
+import { saveOrderToSupabase, getProducts } from '@/lib/supabase-service'
 
 function ghp(amount: number) {
   // Paystack expects amount in minor units (kobo/pesewas)
@@ -34,7 +34,11 @@ export async function POST(request: Request) {
 
     // Resolve product IDs to ensure foreign key integrity
     const itemsToCreate = []
-    const allProducts = await prisma.product.findMany()
+    let allProducts = await prisma.product.findMany()
+    if (allProducts.length === 0) {
+      await getProducts()
+      allProducts = await prisma.product.findMany()
+    }
 
     for (const item of items) {
       let pid = item.productId || item.id

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { saveOrderToSupabase } from '@/lib/supabase-service';
+import { saveOrderToSupabase, getProducts } from '@/lib/supabase-service';
 
 export async function GET(request: Request) {
   try {
@@ -61,7 +61,11 @@ export async function POST(request: Request) {
 
     // Resolve product IDs to ensure foreign key integrity
     const itemsToCreate = [];
-    const allProducts = await prisma.product.findMany();
+    let allProducts = await prisma.product.findMany();
+    if (allProducts.length === 0) {
+      await getProducts();
+      allProducts = await prisma.product.findMany();
+    }
     
     for (const item of rawItems) {
       let pid = item.productId || item.id;

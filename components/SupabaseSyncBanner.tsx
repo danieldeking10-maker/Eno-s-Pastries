@@ -7,6 +7,9 @@ export default function SupabaseSyncBanner() {
   const [status, setStatus] = useState<{
     connected: boolean
     tablesReady: boolean
+    productsReady?: boolean
+    ordersReady?: boolean
+    hasServiceRole?: boolean
     message: string
   } | null>(null)
   const [loading, setLoading] = useState(true)
@@ -31,57 +34,85 @@ export default function SupabaseSyncBanner() {
   }, [])
 
   const copySql = () => {
-    const sqlContent = `-- Supabase Schema for Eno's Pastries
+    const sqlContent = `-- ==========================================
+-- SUPABASE COMPLETE SETUP & PERMISSIONS SCRIPT
+-- For Eno's Pastries (Resolves 42501 permission denied)
+-- ==========================================
+
+-- 1. Create tables if they do not exist
 CREATE TABLE IF NOT EXISTS public.products (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   name TEXT NOT NULL,
   description TEXT,
   price NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
-  imageUrl TEXT,
+  imageurl TEXT,
   category TEXT NOT NULL DEFAULT 'Pastry',
   ingredients JSONB DEFAULT '[]'::jsonb,
   available BOOLEAN DEFAULT true,
-  createdAt TIMESTAMPTZ DEFAULT now(),
-  updatedAt TIMESTAMPTZ DEFAULT now()
+  createdat TIMESTAMPTZ DEFAULT now(),
+  updatedat TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS public.orders (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  userId TEXT,
-  totalAmount NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+  userid TEXT,
+  totalamount NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
   status TEXT NOT NULL DEFAULT 'PENDING',
-  orderType TEXT NOT NULL DEFAULT 'RETAIL',
-  deliveryType TEXT NOT NULL DEFAULT 'PICKUP',
-  deliveryAddress TEXT,
-  deliveryDate TIMESTAMPTZ,
-  customerName TEXT NOT NULL,
-  customerEmail TEXT NOT NULL,
-  customerPhone TEXT NOT NULL,
-  customerNote TEXT,
-  paystackReference TEXT UNIQUE,
-  createdAt TIMESTAMPTZ DEFAULT now(),
-  updatedAt TIMESTAMPTZ DEFAULT now()
+  ordertype TEXT NOT NULL DEFAULT 'RETAIL',
+  deliverytype TEXT NOT NULL DEFAULT 'PICKUP',
+  deliveryaddress TEXT,
+  deliverydate TIMESTAMPTZ,
+  customername TEXT NOT NULL,
+  customeremail TEXT NOT NULL,
+  customerphone TEXT NOT NULL,
+  customernote TEXT,
+  paystackreference TEXT UNIQUE,
+  createdat TIMESTAMPTZ DEFAULT now(),
+  updatedat TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS public.order_items (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  orderId TEXT NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
-  productId TEXT NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
+  orderid TEXT NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
+  productid TEXT NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
   quantity INTEGER NOT NULL DEFAULT 1,
   price NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
-  createdAt TIMESTAMPTZ DEFAULT now()
+  createdat TIMESTAMPTZ DEFAULT now()
 );
 
+-- 2. CRITICAL: Grant schema and table permissions to anon and authenticated
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+
+-- 3. Row Level Security Policies
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.order_items ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Public can view active products" ON public.products;
 CREATE POLICY "Public can view active products" ON public.products FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Allow all modifications on products" ON public.products;
 CREATE POLICY "Allow all modifications on products" ON public.products FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public can insert orders" ON public.orders;
 CREATE POLICY "Public can insert orders" ON public.orders FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public can view orders" ON public.orders;
 CREATE POLICY "Public can view orders" ON public.orders FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Public can update orders" ON public.orders;
 CREATE POLICY "Public can update orders" ON public.orders FOR UPDATE USING (true);
+
+DROP POLICY IF EXISTS "Public can insert order items" ON public.order_items;
 CREATE POLICY "Public can insert order items" ON public.order_items FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public can view order items" ON public.order_items;
 CREATE POLICY "Public can view order items" ON public.order_items FOR SELECT USING (true);`
 
     navigator.clipboard.writeText(sqlContent)
@@ -107,9 +138,13 @@ CREATE POLICY "Public can view order items" ON public.order_items FOR SELECT USI
                 <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
                   <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Active & Synced
                 </span>
+              ) : status?.productsReady ? (
+                <span className="text-[11px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3 text-amber-700" /> Products Active (Orders RLS Update Available)
+                </span>
               ) : (
                 <span className="text-[11px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300 flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3 text-amber-700" /> Connected (Tables Pending)
+                  <AlertCircle className="w-3 h-3 text-amber-700" /> Connected (Tables Setup Available)
                 </span>
               )}
             </div>
