@@ -11,6 +11,7 @@ export default function SupabaseSyncBanner() {
     ordersReady?: boolean
     orderItemsReady?: boolean
     hasServiceRole?: boolean
+    isKeyMalformed?: boolean
     canWriteProducts?: boolean
     message: string
   } | null>(null)
@@ -198,7 +199,22 @@ CREATE POLICY "Public can view order items" ON public.order_items FOR SELECT USI
         </div>
       </div>
 
-      {status && !status.canWriteProducts && !loading && (
+      {status?.isKeyMalformed && !loading && (
+        <div className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 text-xs text-stone-700 space-y-2">
+          <div className="font-bold text-rose-900 flex items-center gap-1.5">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            SUPABASE_SERVICE_ROLE_KEY format incorrect in Vercel
+          </div>
+          <p className="leading-relaxed text-stone-600">
+            The configured key appears to be a database password (short string). Supabase service role keys are JWT tokens that start with <code className="bg-white text-rose-950 font-mono px-1 py-0.5 rounded text-[11px]">eyJ...</code>.
+          </p>
+          <p className="text-[11px] text-stone-600">
+            Copy the secret key from: <strong>Supabase Dashboard &gt; Project Settings (gear icon) &gt; API &gt; Project API keys &gt; &apos;service_role&apos; (secret)</strong>, and paste it into Vercel.
+          </p>
+        </div>
+      )}
+
+      {status && !status.canWriteProducts && !status.isKeyMalformed && !loading && (
         <div className="bg-amber-50/90 border border-amber-200/90 rounded-xl p-3.5 text-xs text-stone-700 space-y-2">
           <div className="font-bold text-amber-900 flex items-center gap-1.5">
             <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
