@@ -13,8 +13,16 @@ if (!resolvedUrl || (!resolvedUrl.startsWith('http://') && !resolvedUrl.startsWi
 
 // 2. Sanitize and resolve Anonymous / Publishable Key
 let resolvedKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '').replace(/['"\r\n\s]/g, '').trim()
-if (!resolvedKey) {
+if (!resolvedKey || resolvedKey.length < 20) {
   resolvedKey = DEFAULT_KEY
+}
+
+// Helper to validate service role keys (must be valid JWT or sb_secret_)
+function isValidServiceRoleKey(key: string): boolean {
+  if (!key || key.length < 30) return false
+  if (key.startsWith('sb_secret_') || key.startsWith('sbp_')) return true
+  const parts = key.split('.')
+  return parts.length === 3 && parts[0].startsWith('ey')
 }
 
 // Standard public/anon client
@@ -26,11 +34,19 @@ export const supabase: SupabaseClient = createClient(resolvedUrl, resolvedKey, {
 })
 
 // 3. Optional Administrative / Service Role Client (bypasses RLS on server-side)
-const serviceRoleKey = (
+const rawServiceRoleKey = (
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   process.env.SUPABASE_SECRET_KEY ||
   ''
 ).replace(/['"\r\n\s]/g, '').trim()
+
+const serviceRoleKey = isValidServiceRoleKey(rawServiceRoleKey) ? rawServiceRoleKey : ''
+
+if (rawServiceRoleKey && !serviceRoleKey) {
+  console.warn(
+    '[Supabase Config Notice] SUPABASE_SERVICE_ROLE_KEY is set but does not appear to be a valid JWT secret (must start with ey... or sb_secret_). Falling back to anon key to prevent API crashes.'
+  )
+}
 
 export const supabaseAdmin: SupabaseClient | null = serviceRoleKey
   ? createClient(resolvedUrl, serviceRoleKey, {
@@ -42,7 +58,7 @@ export const supabaseAdmin: SupabaseClient | null = serviceRoleKey
   : null
 
 /**
- * Returns the administrative Supabase client if configured,
+ * Returns the administrative Supabase client if configured and valid,
  * otherwise falls back to the standard anonymous client.
  */
 export function getSupabaseClient(): SupabaseClient {
@@ -52,3 +68,4 @@ export function getSupabaseClient(): SupabaseClient {
 export function hasServiceRole(): boolean {
   return !!supabaseAdmin
 }
+

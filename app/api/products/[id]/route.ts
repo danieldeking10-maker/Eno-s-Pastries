@@ -1,7 +1,15 @@
 import { NextResponse } from 'next/server';
 import { getProductById, updateProduct, deleteProduct } from '@/lib/supabase-service';
+import { revalidatePath } from 'next/cache';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+const NO_CACHE_HEADERS = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+};
 
 export async function GET(
   request: Request,
@@ -15,7 +23,9 @@ export async function GET(
       return NextResponse.json({ error: 'Product not found' }, { status: 404 });
     }
     
-    return NextResponse.json(product);
+    return NextResponse.json(product, {
+      headers: NO_CACHE_HEADERS,
+    });
   } catch (error) {
     console.error('Error fetching product:', error);
     return NextResponse.json({ error: 'Failed to fetch product' }, { status: 500 });
@@ -41,7 +51,16 @@ export async function PUT(
       return NextResponse.json({ error: 'Failed to update product' }, { status: 500 });
     }
 
-    return NextResponse.json(updated);
+    try {
+      revalidatePath('/products');
+      revalidatePath(`/products/${id}`);
+      revalidatePath('/');
+      revalidatePath('/admin/products');
+    } catch {}
+
+    return NextResponse.json(updated, {
+      headers: NO_CACHE_HEADERS,
+    });
   } catch (error) {
     console.error('Error updating product:', error);
     return NextResponse.json({
@@ -68,7 +87,16 @@ export async function DELETE(
       return NextResponse.json({ error: 'Failed to delete product' }, { status: 500 });
     }
 
-    return NextResponse.json({ message: 'Product deleted permanently' });
+    try {
+      revalidatePath('/products');
+      revalidatePath(`/products/${id}`);
+      revalidatePath('/');
+      revalidatePath('/admin/products');
+    } catch {}
+
+    return NextResponse.json({ message: 'Product deleted permanently' }, {
+      headers: NO_CACHE_HEADERS,
+    });
   } catch (error) {
     console.error('Error deleting product:', error);
     return NextResponse.json({

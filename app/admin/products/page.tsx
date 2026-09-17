@@ -238,12 +238,21 @@ export default function AdminProductsPage() {
         throw new Error(errData.error || 'Failed to save product')
       }
 
-      showToast(
-        'success',
-        editingProduct
-          ? `Product "${formData.name}" updated successfully!`
-          : `New product "${formData.name}" uploaded to market successfully!`
-      )
+      const resData = await res.json().catch(() => ({}))
+
+      if (resData._supabaseWarning || resData._supabaseSynced === false) {
+        showToast(
+          'error',
+          `Saved locally, but Supabase update was blocked by RLS. On Vercel, please set SUPABASE_SERVICE_ROLE_KEY or run the SQL permissions in Supabase.`
+        )
+      } else {
+        showToast(
+          'success',
+          editingProduct
+            ? `Product "${formData.name}" updated & synced with Supabase successfully!`
+            : `New product "${formData.name}" uploaded & synced successfully!`
+        )
+      }
 
       await loadProducts()
       resetForm()
@@ -281,14 +290,23 @@ export default function AdminProductsPage() {
 
       if (!res.ok) throw new Error('Failed to update availability')
 
+      const resData = await res.json().catch(() => ({}))
+
       setProducts((prev) =>
         prev.map((p) => (p.id === product.id ? { ...p, available: newStatus } : p))
       )
 
-      showToast(
-        'success',
-        `"${product.name}" is now ${newStatus ? 'AVAILABLE' : 'OUT OF STOCK'}`
-      )
+      if (resData._supabaseWarning || resData._supabaseSynced === false) {
+        showToast(
+          'error',
+          `"${product.name}" marked ${newStatus ? 'AVAILABLE' : 'OUT OF STOCK'} locally, but Supabase RLS blocked remote update. Set SUPABASE_SERVICE_ROLE_KEY in Vercel to persist.`
+        )
+      } else {
+        showToast(
+          'success',
+          `"${product.name}" is now ${newStatus ? 'AVAILABLE' : 'OUT OF STOCK'} and synced to Supabase!`
+        )
+      }
     } catch (error) {
       console.error(error)
       showToast('error', 'Failed to update product availability.')

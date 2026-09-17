@@ -13,6 +13,8 @@ export interface ProductRecord {
   available: boolean
   createdAt?: string | Date
   updatedAt?: string | Date
+  _supabaseSynced?: boolean
+  _supabaseWarning?: string
 }
 
 export const DEFAULT_PRODUCTS: ProductRecord[] = [
@@ -196,6 +198,32 @@ export async function checkSupabaseStatus() {
       orderItemsError = itemsRes.error.message
     }
 
+    // 4. Test write permissions on products (detect RLS policy restrictions)
+    if (isServiceRole) {
+      canWriteProducts = true
+    } else if (productsReady) {
+      try {
+        const probeId = '__rls_probe_check__'
+        const insertProbe = await withTimeout(
+          client.from('products').insert({ id: probeId, name: '__probe__', price: 0 }).select(),
+          2500
+        ).catch(() => null)
+        if (insertProbe?.error) {
+          canWriteProducts = false
+        } else if (insertProbe?.data && insertProbe.data.length > 0) {
+          canWriteProducts = true
+          // Cleanup probe row
+          try {
+            await client.from('products').delete().eq('id', probeId)
+          } catch {}
+        } else {
+          canWriteProducts = false
+        }
+      } catch {
+        canWriteProducts = false
+      }
+    }
+
     const tablesReady = productsReady && ordersReady && orderItemsReady
 
     let message = 'Supabase active and all tables synced'
@@ -205,6 +233,8 @@ export async function checkSupabaseStatus() {
       } else if (!ordersReady || !orderItemsReady) {
         message = 'Products table active; orders permissions need granting'
       }
+    } else if (!canWriteProducts) {
+      message = 'Supabase connected (Read-Only). Product updates require SUPABASE_SERVICE_ROLE_KEY or public RLS update policy.'
     }
 
     return {
@@ -494,8 +524,13 @@ export async function createProduct(data: {
 
     if (!supaErr && supaData) {
       createdRecord = formatProduct(supaData)
-    } else if (supaErr) {
-      console.warn('Supabase product insert notice:', supaErr.message)
+      createdRecord._supabaseSynced = true
+    } else {
+      createdRecord._supabaseSynced = false
+      if (supaErr) {
+        createdRecord._supabaseWarning = `Supabase insert failed: ${supaErr.message} (Code: ${supaErr.code || 'unknown'}). On Vercel, this product will not persist until SUPABASE_SERVICE_ROLE_KEY is configured or public RLS insert policy is enabled.`
+        console.warn('Supabase product insert notice:', supaErr.message)
+      }
     }
   } catch (err) {
     console.warn('Supabase product create notice:', err)
@@ -597,8 +632,48 @@ export async function updateProduct(
 
     if (!supaErr && supaData) {
       updatedRecord = formatProduct(supaData)
-    } else if (supaErr) {
-      console.warn('Supabase product update notice:', supaErr.message)
+      updatedRecord._supabaseSynced = true
+    } else {
+      updatedRecord._supabaseSynced = false
+      if (supaErr) {
+        updatedRecord._supabaseWarning = `Supabase update rejected: ${supaErr.message} (Code: ${supaErr.code || 'unknown'}). On Vercel, updates will not persist until SUPABASE_SERVICE_ROLE_KEY is added or public RLS update policy is enabled.`
+        console.warn('Supabase product update notice:', supaErr.message)
+      } else if (!supaData) {
+        // 0 rows updated in Supabase! Check if product exists in Supabase
+        const { data: existingInSupa } = await withTimeout(
+          client.from('products').select('id').eq('id', id).maybeSingle(),
+          2000
+        ).catch(() => ({ data: null }))
+
+        if (existingInSupa) {
+          updatedRecord._supabaseWarning = `Product exists in Supabase, but Row Level Security (RLS) blocked the update (0 rows affected). On Vercel, updates will not reflect until SUPABASE_SERVICE_ROLE_KEY is added to Vercel Environment Variables or the SQL update policy is run in Supabase.`
+          console.warn('[Supabase RLS Restriction] Product update affected 0 rows due to RLS policy.')
+        } else {
+          // Attempt insert into Supabase if it wasn't there
+          const insertRes = await withTimeout(
+            client.from('products').insert({
+              id,
+              name: updatedRecord.name,
+              description: updatedRecord.description,
+              price: updatedRecord.price,
+              imageurl: updatedRecord.imageUrl,
+              category: updatedRecord.category,
+              ingredients: ingredientsArray,
+              available: updatedRecord.available,
+              createdat: nowIso,
+              updatedat: nowIso,
+            }).select().maybeSingle(),
+            3000
+          ).catch(() => null)
+
+          if (insertRes?.data) {
+            updatedRecord = formatProduct(insertRes.data)
+            updatedRecord._supabaseSynced = true
+          } else {
+            updatedRecord._supabaseWarning = `Product does not exist in Supabase and could not be inserted (RLS restriction). Add SUPABASE_SERVICE_ROLE_KEY in Vercel to sync.`
+          }
+        }
+      }
     }
   } catch (e) {
     console.warn('Supabase product update exception:', e)
@@ -662,11 +737,17 @@ export async function deleteProduct(id: string): Promise<boolean> {
   // 1. Delete from Supabase
   try {
     const client = getSupabaseClient()
-    const { error } = await withTimeout(
-      client.from('products').delete().eq('id', id),
+    const { data: supaDeleted, error } = await withTimeout(
+      client.from('products').delete().eq('id', id).select(),
       3500
     )
-    if (!error) deleted = true
+    if (!error && Array.isArray(supaDeleted) && supaDeleted.length > 0) {
+      deleted = true
+    } else if (error) {
+      console.warn('Supabase delete notice:', error.message)
+    } else if (Array.isArray(supaDeleted) && supaDeleted.length === 0) {
+      console.warn(`[Supabase RLS Warning] Supabase delete on product ${id} affected 0 rows due to RLS policy.`)
+    }
   } catch (e) {
     console.warn('Supabase delete notice:', e)
   }

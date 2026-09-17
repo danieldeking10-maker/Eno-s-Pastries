@@ -1,12 +1,22 @@
 import { NextResponse } from 'next/server';
 import { getProducts, createProduct } from '@/lib/supabase-service';
+import { revalidatePath } from 'next/cache';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+const NO_CACHE_HEADERS = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+};
 
 export async function GET() {
   try {
     const products = await getProducts();
-    return NextResponse.json(products);
+    return NextResponse.json(products, {
+      headers: NO_CACHE_HEADERS,
+    });
   } catch (error) {
     console.error('Error fetching products:', error);
     return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 });
@@ -31,7 +41,16 @@ export async function POST(request: Request) {
       available: body.available ?? true,
     });
 
-    return NextResponse.json(created, { status: 201 });
+    try {
+      revalidatePath('/products');
+      revalidatePath('/');
+      revalidatePath('/admin/products');
+    } catch {}
+
+    return NextResponse.json(created, {
+      status: 201,
+      headers: NO_CACHE_HEADERS,
+    });
   } catch (error) {
     console.error('Error creating product:', error);
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Failed to create product' }, { status: 500 });
