@@ -10,6 +10,8 @@ if (!resolvedUrl || (!resolvedUrl.startsWith('http://') && !resolvedUrl.startsWi
   resolvedUrl = resolvedUrl.replace(/\/+$/, '')
 }
 
+export const supabaseUrl = resolvedUrl
+
 let resolvedKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '').trim()
 if (!resolvedKey) {
   resolvedKey = DEFAULT_KEY

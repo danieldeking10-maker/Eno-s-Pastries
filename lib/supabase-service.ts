@@ -1,5 +1,8 @@
 import { supabase } from './supabase'
+import { supabaseAdmin } from './supabase-admin'
 import prisma from './prisma'
+
+const databaseClient = supabaseAdmin || supabase
 
 export interface ProductRecord {
   id: string
@@ -134,7 +137,7 @@ function formatProduct(p: any): ProductRecord {
  */
 export async function checkSupabaseStatus() {
   try {
-    const { error } = await supabase.from('products').select('id').limit(1)
+    const { error } = await databaseClient.from('products').select('id').limit(1)
     if (error) {
       return { connected: true, tablesReady: false, message: error.message }
     }
@@ -150,7 +153,7 @@ export async function checkSupabaseStatus() {
 export async function getProducts(): Promise<ProductRecord[]> {
   // 1. Try Supabase first
   try {
-    const { data, error } = await supabase.from('products').select('*')
+    const { data, error } = await databaseClient.from('products').select('*')
 
     if (!error && Array.isArray(data) && data.length > 0) {
       const formatted = data.map(formatProduct)
@@ -538,7 +541,7 @@ export async function deleteProduct(id: string): Promise<boolean> {
 
   // 1. Delete from Supabase
   try {
-    const { error } = await supabase.from('products').delete().eq('id', id)
+    const { error } = await databaseClient.from('products').delete().eq('id', id)
     if (!error) deleted = true
   } catch (e) {
     console.warn('Supabase delete notice:', e)
@@ -553,7 +556,7 @@ export async function deleteProduct(id: string): Promise<boolean> {
     // Readonly SQLite catch
   }
 
-  return deleted || true
+  return deleted
 }
 
 /**
@@ -561,7 +564,7 @@ export async function deleteProduct(id: string): Promise<boolean> {
  */
 export async function saveOrderToSupabase(orderData: any, orderItems: any[]) {
   try {
-    const { data: order, error } = await supabase
+    const { data: order, error } = await databaseClient
       .from('orders')
       .insert({
         id: orderData.id,
@@ -589,7 +592,7 @@ export async function saveOrderToSupabase(orderData: any, orderItems: any[]) {
           quantity: item.quantity,
           price: item.price,
         }))
-        await supabase.from('order_items').insert(itemsToInsert)
+        await databaseClient.from('order_items').insert(itemsToInsert)
       }
       return { success: true, order }
     }

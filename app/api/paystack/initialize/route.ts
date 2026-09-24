@@ -42,26 +42,31 @@ export async function POST(request: Request) {
       if (!matched && item.name) {
         matched = allProducts.find(p => p.name.toLowerCase() === String(item.name).toLowerCase())
       }
-      if (!matched && allProducts.length > 0) {
-        matched = allProducts[0]
+      if (!matched) {
+        return NextResponse.json({ error: 'One or more products are no longer available' }, { status: 400 })
       }
 
-      if (matched) {
-        itemsToCreate.push({
-          productId: matched.id,
-          quantity: Number(item.quantity) || 1,
-          price: Number(item.price) || Number(matched.price) || 0,
-        })
+      const quantity = Number(item.quantity)
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) {
+        return NextResponse.json({ error: 'Each product quantity must be a whole number from 1 to 100' }, { status: 400 })
       }
+
+      itemsToCreate.push({
+        productId: matched.id,
+        quantity,
+        price: Number(matched.price) || 0,
+      })
     }
 
     if (itemsToCreate.length === 0) {
       return NextResponse.json({ error: 'No valid products in cart' }, { status: 400 })
     }
 
+    const calculatedTotal = itemsToCreate.reduce((sum, item) => sum + item.price * item.quantity, 0)
+
     const order = await prisma.order.create({
       data: {
-        totalAmount: Number(totalAmount) || 0,
+        totalAmount: calculatedTotal,
         status: 'PENDING',
         orderType: orderType ?? 'RETAIL',
         deliveryType: deliveryType ?? 'PICKUP',
@@ -112,7 +117,7 @@ export async function POST(request: Request) {
       })
     }
 
-    const amountKobo = ghp(Number(totalAmount))
+    const amountKobo = ghp(calculatedTotal)
 
     const body: Record<string, any> = {
       email: customerEmail,

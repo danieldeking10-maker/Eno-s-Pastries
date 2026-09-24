@@ -29,7 +29,7 @@ export async function POST(request: Request) {
         email,
         name: name || email.split('@')[0],
         password: storedPassword,
-        role: 'ADMIN',
+        role: 'CUSTOMER',
       },
       select: { id: true, email: true, role: true, name: true },
     })

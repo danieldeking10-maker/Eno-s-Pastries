@@ -288,7 +288,7 @@ export default function DeliveryClusterMap() {
     setUpdatingOrderId(orderId)
     try {
       const res = await fetch(`/api/orders/${orderId}`, {
-        method: 'PATCH',
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       })

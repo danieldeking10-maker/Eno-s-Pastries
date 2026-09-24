@@ -37,6 +37,11 @@ export async function PUT(
     }
 
     // Prisma enum values are: PENDING, CONFIRMED, PREPARING, READY, DELIVERED, CANCELLED
+    const validStatuses = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'DELIVERED', 'CANCELLED'] as const
+    if (!validStatuses.includes(status)) {
+      return NextResponse.json({ error: 'Invalid order status' }, { status: 400 })
+    }
+
     const updated = await prisma.order.update({
       where: { id },
       data: { status },
