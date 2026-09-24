@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import DeliveryClusterMap from '@/components/DeliveryClusterMap'
 import SupabaseSyncBanner from '@/components/SupabaseSyncBanner'
-import { Package, ShoppingBag, BarChart2, QrCode, Truck, Sparkles } from 'lucide-react'
+import { Package, ShoppingBag, BarChart2, QrCode, Truck, Sparkles, Lock } from 'lucide-react'
 
 export default function AdminDashboard() {
   return (
@@ -10,7 +10,7 @@ export default function AdminDashboard() {
         {/* Welcome Banner */}
         <div className="bg-gradient-to-r from-amber-950 via-amber-900 to-orange-950 rounded-3xl p-6 sm:p-8 text-white shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6 border border-amber-800/80">
           <div>
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
               <span className="bg-amber-500/20 text-amber-300 font-extrabold text-[11px] uppercase tracking-widest px-3 py-1 rounded-full border border-amber-400/30 flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Admin Command Station
               </span>
@@ -24,6 +24,14 @@ export default function AdminDashboard() {
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
+            <Link
+              href="/admin?lock=true"
+              className="px-4 py-3 bg-amber-900/60 hover:bg-amber-900 text-amber-200 hover:text-white rounded-2xl font-bold text-xs shadow-md transition-all flex items-center gap-2 border border-amber-700/60 cursor-pointer"
+              title="Lock Admin Station & Show Passcode Gate"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span>Lock Admin</span>
+            </Link>
             <Link
               href="/admin/orders"
               className="px-5 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-amber-950 rounded-2xl font-black text-xs sm:text-sm shadow-md transition-all flex items-center gap-2 cursor-pointer"
