@@ -35,6 +35,20 @@ export default function CartPage() {
       console.error('Failed to save customer info locally:', err)
     }
 
+    const payloadItems = cart
+      .filter((item) => item && (item.id || item.name))
+      .map((item) => ({
+        productId: item.id || null,
+        name: item.name,
+        quantity: 1,
+        price: Number(item.price) || 0,
+      }))
+
+    if (payloadItems.length === 0) {
+      alert('Your cart does not contain any valid products.')
+      return
+    }
+
     const payload = {
       customerName: checkoutForm.customerName,
       customerEmail: checkoutForm.customerEmail,
@@ -46,11 +60,7 @@ export default function CartPage() {
       customerNote: checkoutForm.customerNote ? checkoutForm.customerNote : null,
       status: 'PENDING',
       totalAmount: cartTotal,
-      items: cart.map((item) => ({
-        productId: item.id,
-        quantity: 1,
-        price: item.price,
-      })),
+      items: payloadItems,
     }
 
     try {

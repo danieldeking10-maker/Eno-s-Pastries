@@ -38,24 +38,38 @@ export async function POST(request: Request) {
     const remoteProducts = await getProducts()
 
     for (const item of items) {
-      let pid = item.productId || item.id
-      let matched = localProducts.find(p => p.id === pid) || remoteProducts.find(p => p.id === pid)
-      if (!matched && item.name) {
-        const normalizedName = String(item.name).trim().toLowerCase()
-        matched = localProducts.find(p => p.name.toLowerCase() === normalizedName) ||
-          remoteProducts.find(p => p.name.toLowerCase() === normalizedName)
+      const rawProductId = item?.productId ?? item?.id ?? item?.product?.id ?? null
+      const rawName = typeof item?.name === 'string' && item.name.trim()
+        ? item.name
+        : typeof item?.product?.name === 'string' && item.product.name.trim()
+          ? item.product.name
+          : ''
+
+      let matched = null
+      const normalizedProductId = rawProductId ? String(rawProductId).trim() : ''
+
+      if (normalizedProductId) {
+        matched = localProducts.find(p => String(p.id).trim() === normalizedProductId) ||
+          remoteProducts.find(p => String(p.id).trim() === normalizedProductId)
       }
+
+      if (!matched && rawName) {
+        const normalizedName = String(rawName).trim().toLowerCase()
+        matched = localProducts.find(p => String(p.name || '').trim().toLowerCase() === normalizedName) ||
+          remoteProducts.find(p => String(p.name || '').trim().toLowerCase() === normalizedName)
+      }
+
       if (!matched) {
         return NextResponse.json({ error: 'One or more products are no longer available' }, { status: 400 })
       }
 
-      const quantity = Number(item.quantity)
+      const quantity = Number(item?.quantity ?? item?.qty ?? 1)
       if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) {
         return NextResponse.json({ error: 'Each product quantity must be a whole number from 1 to 100' }, { status: 400 })
       }
 
       const productId = matched.id
-      const price = Number(matched.price) || 0
+      const price = Number(item?.price ?? matched.price ?? 0) || Number(matched.price) || 0
 
       // Orders use Prisma relations, so ensure a Supabase-only product exists locally.
       if (!localProducts.some((product) => product.id === productId)) {
