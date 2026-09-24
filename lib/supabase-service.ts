@@ -1,6 +1,7 @@
-import { supabase } from './supabase'
+import { supabase, getSupabaseClient, hasServiceRole } from './supabase'
 import { supabaseAdmin } from './supabase-admin'
 import prisma from './prisma'
+import crypto from 'crypto'
 
 const databaseClient = supabaseAdmin || supabase
 
@@ -15,6 +16,8 @@ export interface ProductRecord {
   available: boolean
   createdAt?: string | Date
   updatedAt?: string | Date
+  _supabaseSynced?: boolean
+  _supabaseWarning?: string
 }
 
 export const DEFAULT_PRODUCTS: ProductRecord[] = [
@@ -100,6 +103,40 @@ export const DEFAULT_PRODUCTS: ProductRecord[] = [
   },
 ]
 
+// In-memory caching for ultra-fast response times and resilience
+let memoryProductCache: ProductRecord[] | null = null
+let lastCacheTimestamp = 0
+const CACHE_TTL_MS = 15000 // 15 seconds
+const deletedProductIds = new Set<string>()
+
+export function invalidateProductCache() {
+  memoryProductCache = null
+  lastCacheTimestamp = 0
+}
+
+export function updateMemoryCacheWithProduct(product: ProductRecord) {
+  if (!memoryProductCache) {
+    memoryProductCache = [product]
+  } else {
+    const idx = memoryProductCache.findIndex((p) => p.id === product.id)
+    if (idx >= 0) {
+      memoryProductCache[idx] = product
+    } else {
+      memoryProductCache.push(product)
+    }
+  }
+  deletedProductIds.delete(product.id)
+  lastCacheTimestamp = Date.now()
+}
+
+export function removeProductFromMemoryCache(id: string) {
+  deletedProductIds.add(id)
+  if (memoryProductCache) {
+    memoryProductCache = memoryProductCache.filter((p) => p.id !== id)
+  }
+  lastCacheTimestamp = Date.now()
+}
+
 function parseIngredients(rawIng: any): string[] {
   if (Array.isArray(rawIng)) return rawIng.map(String)
   if (typeof rawIng === 'string') {
@@ -132,192 +169,413 @@ function formatProduct(p: any): ProductRecord {
   }
 }
 
-/**
- * Checks Supabase connection and whether tables exist.
- */
-export async function checkSupabaseStatus() {
-  try {
-    const { error } = await databaseClient.from('products').select('id').limit(1)
-    if (error) {
-      return { connected: true, tablesReady: false, message: error.message }
-    }
-    return { connected: true, tablesReady: true, message: 'Supabase connected and tables active' }
-  } catch (err: any) {
-    return { connected: false, tablesReady: false, message: err?.message || 'Connection error' }
+function formatPrismaProduct(p: any): ProductRecord {
+  return {
+    id: String(p.id),
+    name: String(p.name || ''),
+    description: p.description ? String(p.description) : '',
+    price: Number(p.price) || 0,
+    imageUrl: p.imageUrl || null,
+    category: p.category || 'Pastry',
+    ingredients: parseIngredients(p.ingredients),
+    available: p.available !== false,
+    createdAt: p.createdAt ? new Date(p.createdAt).toISOString() : new Date().toISOString(),
+    updatedAt: p.updatedAt ? new Date(p.updatedAt).toISOString() : new Date().toISOString(),
   }
 }
 
 /**
- * Fetch all products: queries Supabase, synchronizes to local Prisma cache, and falls back if needed.
+ * Checks Supabase connection, schema readiness, and RLS/write permissions.
  */
-export async function getProducts(): Promise<ProductRecord[]> {
-  // 1. Try Supabase first
+export async function checkSupabaseStatus() {
+  const client = getSupabaseClient()
+  const isServiceRole = hasServiceRole()
+
+  let productsReady = false
+  let ordersReady = false
+  let orderItemsReady = false
+  let canWriteProducts = isServiceRole
+  let productsError: string | null = null
+  let ordersError: string | null = null
+  let orderItemsError: string | null = null
+
   try {
-    const { data, error } = await databaseClient.from('products').select('*')
+    const prodRes = await withTimeout(client.from('products').select('id').limit(1), 3000)
+    if (!prodRes.error) {
+      productsReady = true
+    } else {
+      productsError = prodRes.error.message
+    }
 
-    if (!error && Array.isArray(data) && data.length > 0) {
-      const formatted = data.map(formatProduct)
-      formatted.sort((a, b) => {
-        const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0
-        const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0
-        return tA - tB
-      })
+    const ordRes = await withTimeout(client.from('orders').select('id').limit(1), 3000)
+    if (!ordRes.error) {
+      ordersReady = true
+    } else {
+      ordersError = ordRes.error.message
+    }
 
-      // Sync to Prisma in background (fails silently if readonly filesystem)
-      Promise.allSettled(
-        formatted.map((p) =>
-          prisma.product.upsert({
-            where: { id: p.id },
-            update: {
-              name: p.name,
-              description: p.description || '',
-              price: p.price,
-              imageUrl: p.imageUrl || '',
-              category: p.category,
-              ingredients: JSON.stringify(p.ingredients),
-              available: p.available,
-            },
-            create: {
-              id: p.id,
-              name: p.name,
-              description: p.description || '',
-              price: p.price,
-              imageUrl: p.imageUrl || '',
-              category: p.category,
-              ingredients: JSON.stringify(p.ingredients),
-              available: p.available,
-            },
-          })
-        )
-      ).catch(() => {})
+    const itemsRes = await withTimeout(client.from('order_items').select('id').limit(1), 3000)
+    if (!itemsRes.error) {
+      orderItemsReady = true
+    } else {
+      orderItemsError = itemsRes.error.message
+    }
 
-      return formatted
+    if (isServiceRole) {
+      const writeRes = await withTimeout(
+        client.from('products').insert({
+          id: `ping-${Date.now()}`,
+          name: 'health_check',
+          description: 'health check',
+          price: 0,
+          imageurl: '',
+          category: 'Pastry',
+          ingredients: ['health'],
+          available: true,
+          createdat: new Date().toISOString(),
+          updatedat: new Date().toISOString(),
+        }).select('id').limit(1),
+        4000
+      )
+      canWriteProducts = !writeRes.error
+      if (writeRes.error) {
+        productsError = writeRes.error.message
+      }
+    }
+  } catch (err: any) {
+    return {
+      connected: false,
+      tablesReady: false,
+      message: err?.message || 'Connection error',
+    }
+  }
+
+  return {
+    connected: productsReady || ordersReady || orderItemsReady,
+    tablesReady: productsReady && ordersReady && orderItemsReady,
+    canWriteProducts,
+    productsReady,
+    ordersReady,
+    orderItemsReady,
+    productsError,
+    ordersError,
+    orderItemsError,
+    message: productsReady && ordersReady && orderItemsReady
+      ? 'Supabase connected and tables active'
+      : 'Supabase connection partially available',
+  }
+}
+
+/**
+ * Execute a promise with a safety timeout to prevent hanging the server on slow external networks.
+ */
+async function withTimeout<T>(promiseLike: PromiseLike<T>, ms = 3500): Promise<T> {
+  const promise = Promise.resolve(promiseLike)
+  let timer: NodeJS.Timeout
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Operation timed out after ${ms}ms`)), ms)
+  })
+  try {
+    return await Promise.race([promise, timeoutPromise])
+  } finally {
+    clearTimeout(timer!)
+  }
+}
+
+/**
+ * Checks Supabase connection, schema readiness, and RLS/write permissions.
+ */
+export async function checkSupabaseStatus() {
+  const client = getSupabaseClient()
+  const isServiceRole = hasServiceRole()
+
+  let productsReady = false
+  let ordersReady = false
+  let orderItemsReady = false
+  let canWriteProducts = isServiceRole
+  let productsError: string | null = null
+  let ordersError: string | null = null
+  let orderItemsError: string | null = null
+
+  try {
+    // 1. Check products table
+    const prodRes = await withTimeout(client.from('products').select('id').limit(1), 3000)
+    if (!prodRes.error) {
+      productsReady = true
+    } else {
+      productsError = prodRes.error.message
+    }
+
+    // 2. Check orders table
+    const ordRes = await withTimeout(client.from('orders').select('id').limit(1), 3000)
+    if (!ordRes.error) {
+      ordersReady = true
+    } else {
+      ordersError = ordRes.error.message
+    }
+
+    // 3. Check order_items table
+    const itemsRes = await withTimeout(client.from('order_items').select('id').limit(1), 3000)
+    if (!itemsRes.error) {
+      orderItemsReady = true
+    } else {
+      orderItemsError = itemsRes.error.message
+    }
+
+    // 4. Test write permissions on products (detect RLS policy restrictions)
+    if (isServiceRole) {
+      canWriteProducts = true
+    } else if (productsReady) {
+      try {
+        const probeId = '__rls_probe_check__'
+        const insertProbe = await withTimeout(
+          client.from('products').insert({ id: probeId, name: '__probe__', price: 0 }).select(),
+          2500
+        ).catch(() => null)
+        if (insertProbe?.error) {
+          canWriteProducts = false
+        } else if (insertProbe?.data && insertProbe.data.length > 0) {
+          canWriteProducts = true
+          // Cleanup probe row
+          try {
+            await client.from('products').delete().eq('id', probeId)
+          } catch {}
+        } else {
+          canWriteProducts = false
+        }
+      } catch {
+        canWriteProducts = false
+      }
+    }
+
+    const tablesReady = productsReady && ordersReady && orderItemsReady
+
+    const rawServiceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || '').trim()
+    const isKeyMalformed = !!rawServiceKey && !isServiceRole
+
+    let message = 'Supabase active and all tables synced'
+    if (isKeyMalformed) {
+      message = 'SUPABASE_SERVICE_ROLE_KEY is set to a short string (likely database password) instead of the Supabase service_role JWT key (starts with "eyJ...").'
+    } else if (!tablesReady) {
+      if (!productsReady && !ordersReady) {
+        message = 'Supabase connected, but SQL tables need to be created'
+      } else if (!ordersReady || !orderItemsReady) {
+        message = 'Products table active; orders permissions need granting'
+      }
+    } else if (!canWriteProducts) {
+      message = 'Supabase connected (Read-Only). Product updates require SUPABASE_SERVICE_ROLE_KEY or public RLS update policy.'
+    }
+
+    return {
+      connected: true,
+      tablesReady,
+      hasServiceRole: isServiceRole,
+      isKeyMalformed,
+      productsReady,
+      ordersReady,
+      orderItemsReady,
+      canWriteProducts,
+      message,
+      details: {
+        productsError,
+        ordersError,
+        orderItemsError,
+      },
+    }
+  } catch (err: any) {
+    return {
+      connected: false,
+      tablesReady: false,
+      hasServiceRole: isServiceRole,
+      isKeyMalformed: false,
+      productsReady: false,
+      ordersReady: false,
+      orderItemsReady: false,
+      canWriteProducts: false,
+      message: err?.message || 'Connection error to Supabase',
+    }
+  }
+}
+
+/**
+ * Fetch all products: checks memory cache, queries Supabase with safety timeout,
+ * reconciles with local Prisma records by timestamp so local updates are never lost,
+ * and falls back gracefully.
+ */
+export async function getProducts(forceRefresh = false): Promise<ProductRecord[]> {
+  const now = Date.now()
+  if (!forceRefresh && memoryProductCache && memoryProductCache.length > 0 && now - lastCacheTimestamp < CACHE_TTL_MS) {
+    return memoryProductCache
+  }
+
+  // 1. Fetch deleted IDs from Prisma to prevent resurrecting deleted products
+  try {
+    const deletedRows = await prisma.deletedProduct.findMany().catch(() => [])
+    for (const d of deletedRows) {
+      deletedProductIds.add(d.id)
+    }
+  } catch {}
+
+  // 2. Fetch Prisma products
+  let prismaProducts: any[] = []
+  try {
+    prismaProducts = await prisma.product.findMany({
+      orderBy: { createdAt: 'asc' },
+    })
+  } catch (err) {
+    console.warn('Prisma products query notice:', err)
+  }
+
+  // 3. Fetch Supabase products (with 3.5s timeout)
+  let supaProducts: ProductRecord[] = []
+  try {
+    const client = getSupabaseClient()
+    const { data, error } = await withTimeout(client.from('products').select('*'), 3500)
+
+    if (!error && Array.isArray(data)) {
+      supaProducts = data.map(formatProduct)
     }
   } catch (err) {
     console.warn('Supabase products fetch notice:', err)
   }
 
-  // 2. Try Prisma
-  try {
-    const prismaProducts = await prisma.product.findMany({
-      orderBy: { createdAt: 'asc' },
-    })
+  // 4. Reconcile both sources using timestamps
+  const productMap = new Map<string, ProductRecord>()
 
-    if (prismaProducts.length > 0) {
-      return prismaProducts.map((p) => ({
-        id: p.id,
-        name: p.name,
-        description: p.description,
-        price: Number(p.price),
-        imageUrl: p.imageUrl,
-        category: p.category,
-        ingredients: parseIngredients(p.ingredients),
-        available: p.available,
-        createdAt: p.createdAt,
-        updatedAt: p.updatedAt,
-      }))
-    }
-  } catch (err) {
-    console.warn('Prisma products query notice:', err)
+  // First populate with Supabase products (if not deleted)
+  for (const s of supaProducts) {
+    if (deletedProductIds.has(s.id)) continue
+    productMap.set(s.id, s)
   }
 
-  // 3. Fallback to default catalog
-  try {
+  // Overlay Prisma products: if Prisma has a newer updatedAt, keep Prisma
+  for (const p of prismaProducts) {
+    if (deletedProductIds.has(p.id)) continue
+    const pFormatted = formatPrismaProduct(p)
+    if (productMap.has(p.id)) {
+      const supaItem = productMap.get(p.id)!
+      const pUpdated = new Date(p.updatedAt).getTime()
+      const sUpdated = supaItem.updatedAt ? new Date(supaItem.updatedAt).getTime() : 0
+
+      if (pUpdated >= sUpdated) {
+        // Local update is newer or equal: preserve local edits!
+        productMap.set(p.id, pFormatted)
+      } else {
+        productMap.set(p.id, supaItem)
+      }
+    } else {
+      productMap.set(p.id, pFormatted)
+    }
+  }
+
+  // If completely empty, fallback to DEFAULT_PRODUCTS
+  if (productMap.size === 0) {
     for (const item of DEFAULT_PRODUCTS) {
-      await prisma.product.upsert({
-        where: { id: item.id },
-        update: {
-          name: item.name,
-          description: item.description || '',
-          price: item.price,
-          imageUrl: item.imageUrl || '',
-          category: item.category,
-          ingredients: JSON.stringify(item.ingredients),
-          available: item.available,
-        },
-        create: {
-          id: item.id,
-          name: item.name,
-          description: item.description || '',
-          price: item.price,
-          imageUrl: item.imageUrl || '',
-          category: item.category,
-          ingredients: JSON.stringify(item.ingredients),
-          available: item.available,
-        },
-      }).catch(() => {})
+      if (!deletedProductIds.has(item.id)) {
+        productMap.set(item.id, item)
+      }
     }
-  } catch (e) {
-    // ignore
   }
 
-  return DEFAULT_PRODUCTS
+  const result = Array.from(productMap.values())
+  result.sort((a, b) => {
+    const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0
+    const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0
+    return tA - tB
+  })
+
+  // Synchronize new Supabase records into Prisma SQLite in background
+  // (never overwriting Prisma records that are newer)
+  try {
+    for (const item of result) {
+      const pInPrisma = prismaProducts.find((p) => p.id === item.id)
+      const pUpdated = pInPrisma ? new Date(pInPrisma.updatedAt).getTime() : 0
+      const itemUpdated = item.updatedAt ? new Date(item.updatedAt).getTime() : 0
+
+      if (!pInPrisma) {
+        prisma.product.create({
+          data: {
+            id: item.id,
+            name: item.name,
+            description: item.description || '',
+            price: item.price,
+            imageUrl: item.imageUrl || '',
+            category: item.category,
+            ingredients: JSON.stringify(item.ingredients),
+            available: item.available,
+          },
+        }).catch(() => {})
+      } else if (itemUpdated > pUpdated) {
+        prisma.product.update({
+          where: { id: item.id },
+          data: {
+            name: item.name,
+            description: item.description || '',
+            price: item.price,
+            imageUrl: item.imageUrl || '',
+            category: item.category,
+            ingredients: JSON.stringify(item.ingredients),
+            available: item.available,
+          },
+        }).catch(() => {})
+      }
+    }
+  } catch {}
+
+  memoryProductCache = result
+  lastCacheTimestamp = Date.now()
+
+  return result
 }
 
 /**
- * Fetch a single product by ID from Supabase or Prisma
+ * Fetch a single product by ID from Memory, Supabase, or Prisma with timestamp reconciliation
  */
 export async function getProductById(id: string): Promise<ProductRecord | null> {
-  // 1. Try Supabase first
-  try {
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .eq('id', id)
-      .maybeSingle()
+  if (deletedProductIds.has(id)) return null
 
+  // Check memory cache first
+  if (memoryProductCache) {
+    const found = memoryProductCache.find((p) => p.id === id)
+    if (found) return found
+  }
+
+  // 1. Check Prisma
+  let prismaItem: any = null
+  try {
+    prismaItem = await prisma.product.findUnique({ where: { id } })
+  } catch (err) {
+    console.warn('Prisma getProductById notice:', err)
+  }
+
+  // 2. Check Supabase
+  let supaItem: ProductRecord | null = null
+  try {
+    const client = getSupabaseClient()
+    const { data, error } = await withTimeout(
+      client.from('products').select('*').eq('id', id).maybeSingle(),
+      2500
+    )
     if (!error && data) {
-      const formatted = formatProduct(data)
-      prisma.product.upsert({
-        where: { id: formatted.id },
-        update: {
-          name: formatted.name,
-          description: formatted.description || '',
-          price: formatted.price,
-          imageUrl: formatted.imageUrl || '',
-          category: formatted.category,
-          ingredients: JSON.stringify(formatted.ingredients),
-          available: formatted.available,
-        },
-        create: {
-          id: formatted.id,
-          name: formatted.name,
-          description: formatted.description || '',
-          price: formatted.price,
-          imageUrl: formatted.imageUrl || '',
-          category: formatted.category,
-          ingredients: JSON.stringify(formatted.ingredients),
-          available: formatted.available,
-        },
-      }).catch(() => {})
-      return formatted
+      supaItem = formatProduct(data)
     }
   } catch (err) {
     console.warn('Supabase getProductById notice:', err)
   }
 
-  // 2. Fallback to Prisma
-  try {
-    const product = await prisma.product.findUnique({
-      where: { id },
-    })
-    if (product) {
-      return {
-        id: product.id,
-        name: product.name,
-        description: product.description,
-        price: Number(product.price),
-        imageUrl: product.imageUrl,
-        category: product.category,
-        ingredients: parseIngredients(product.ingredients),
-        available: product.available,
-        createdAt: product.createdAt,
-        updatedAt: product.updatedAt,
-      }
+  // If both exist, return whichever was updated more recently
+  if (prismaItem && supaItem) {
+    const pUpdated = new Date(prismaItem.updatedAt).getTime()
+    const sUpdated = supaItem.updatedAt ? new Date(supaItem.updatedAt).getTime() : 0
+    if (pUpdated >= sUpdated) {
+      return formatPrismaProduct(prismaItem)
+    } else {
+      return supaItem
     }
-  } catch (err) {
-    console.warn('Prisma getProductById notice:', err)
   }
+
+  if (prismaItem) return formatPrismaProduct(prismaItem)
+  if (supaItem) return supaItem
 
   // 3. Fallback check in defaults
   const def = DEFAULT_PRODUCTS.find((p) => p.id === id)
@@ -325,7 +583,7 @@ export async function getProductById(id: string): Promise<ProductRecord | null> 
 }
 
 /**
- * Create a new product in Supabase and Prisma safely
+ * Create a new product in Supabase and Prisma safely without crashing.
  */
 export async function createProduct(data: {
   name: string
@@ -336,8 +594,9 @@ export async function createProduct(data: {
   ingredients?: string[] | string
   available?: boolean
 }): Promise<ProductRecord> {
-  const generatedId = `prod-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
-  const numPrice = Number(data.price) || 0
+  // Use standard RFC UUID v4 to satisfy both UUID and TEXT column types in PostgreSQL
+  const generatedId = crypto.randomUUID()
+  const numPrice = Math.max(0, Number(data.price) || 0)
   const ingredientsArray = parseIngredients(data.ingredients || [])
   const ingredientsStr = JSON.stringify(ingredientsArray)
   const category = data.category?.trim() || 'Pastry'
@@ -357,11 +616,13 @@ export async function createProduct(data: {
     available,
     createdAt: nowIso,
     updatedAt: nowIso,
+    _supabaseSynced: false,
   }
 
-  // 1. Insert to Supabase (uses PostgreSQL lowercase column names)
+  // 1. Insert to Supabase (PostgreSQL column names in lowercase: imageurl, createdat, etc.)
   try {
-    const supaPayload: Record<string, any> = {
+    const client = getSupabaseClient()
+    const supaPayload = {
       id: generatedId,
       name: createdRecord.name,
       description,
@@ -374,25 +635,39 @@ export async function createProduct(data: {
       updatedat: nowIso,
     }
 
-    const { data: supaData, error: supaErr } = await supabase
-      .from('products')
-      .insert(supaPayload)
-      .select()
-      .maybeSingle()
+    const { data: supaData, error: supaErr } = await withTimeout(
+      client.from('products').insert(supaPayload).select().maybeSingle(),
+      4000
+    )
 
     if (!supaErr && supaData) {
       createdRecord = formatProduct(supaData)
-    } else if (supaErr) {
-      console.warn('Supabase product insert notice:', supaErr.message)
+      createdRecord._supabaseSynced = true
+    } else {
+      createdRecord._supabaseSynced = false
+      if (supaErr) {
+        createdRecord._supabaseWarning = `Supabase insert failed: ${supaErr.message} (Code: ${supaErr.code || 'unknown'}). On Vercel, this product will not persist until SUPABASE_SERVICE_ROLE_KEY is configured or public RLS insert policy is enabled.`
+        console.warn('Supabase product insert notice:', supaErr.message)
+      }
     }
   } catch (err) {
-    console.warn('Supabase product create error:', err)
+    console.warn('Supabase product create notice:', err)
   }
 
-  // 2. Try Prisma (safely caught if running in read-only environment like Vercel SQLite)
+  // 2. Persist to Prisma SQLite
   try {
-    const prismaProduct = await prisma.product.create({
-      data: {
+    const prismaProduct = await prisma.product.upsert({
+      where: { id: createdRecord.id },
+      update: {
+        name: createdRecord.name,
+        description,
+        price: numPrice,
+        imageUrl,
+        category,
+        ingredients: ingredientsStr,
+        available,
+      },
+      create: {
         id: createdRecord.id,
         name: createdRecord.name,
         description,
@@ -403,7 +678,10 @@ export async function createProduct(data: {
         available,
       },
     })
+
     if (prismaProduct) {
+      const savedSynced = createdRecord._supabaseSynced
+      const savedWarning = createdRecord._supabaseWarning
       createdRecord = {
         id: prismaProduct.id,
         name: prismaProduct.name,
@@ -415,86 +693,144 @@ export async function createProduct(data: {
         available: prismaProduct.available,
         createdAt: prismaProduct.createdAt,
         updatedAt: prismaProduct.updatedAt,
+        _supabaseSynced: savedSynced,
+        _supabaseWarning: savedWarning,
       }
     }
   } catch (prismaErr) {
-    // Readonly SQLite on Vercel is expected; Supabase handled persistence
+    console.warn('Prisma product save notice:', prismaErr)
   }
+
+  // Remove from deleted tracker if previously deleted
+  deletedProductIds.delete(createdRecord.id)
+  await prisma.deletedProduct.deleteMany({ where: { id: createdRecord.id } }).catch(() => {})
+
+  // Immediately update in-memory cache
+  updateMemoryCacheWithProduct(createdRecord)
 
   return createdRecord
 }
 
 /**
- * Update a product across Supabase and Prisma
+ * Update a product across Supabase and Prisma safely.
  */
-export async function updateProduct(id: string, updates: Partial<ProductRecord>): Promise<ProductRecord | null> {
-  const price = updates.price !== undefined ? Number(updates.price) : undefined
-  const ingredientsArray = updates.ingredients !== undefined ? parseIngredients(updates.ingredients) : undefined
-  const ingredientsStr = ingredientsArray ? JSON.stringify(ingredientsArray) : undefined
-  const name = updates.name !== undefined ? String(updates.name).trim() : undefined
-  const description = updates.description !== undefined ? String(updates.description || '') : undefined
-  const imageUrl = updates.imageUrl !== undefined ? String(updates.imageUrl || '').trim() : undefined
-  const category = updates.category !== undefined ? String(updates.category).trim() || 'Pastry' : undefined
+export async function updateProduct(
+  id: string,
+  updates: Partial<ProductRecord>
+): Promise<ProductRecord | null> {
+  const existing = await getProductById(id)
+  const price = updates.price !== undefined ? Math.max(0, Number(updates.price)) : (existing ? existing.price : 0)
+  const ingredientsArray = updates.ingredients !== undefined ? parseIngredients(updates.ingredients) : (existing ? existing.ingredients : [])
+  const ingredientsStr = JSON.stringify(ingredientsArray)
+  const nowIso = new Date().toISOString()
 
-  let updatedRecord: ProductRecord | null = null
-
-  // 1. Update in Supabase (Postgres column: imageurl, updatedat, etc.)
-  try {
-    const supaPayload: Record<string, any> = {}
-    if (name !== undefined) supaPayload.name = name
-    if (description !== undefined) supaPayload.description = description
-    if (price !== undefined) supaPayload.price = price
-    if (imageUrl !== undefined) {
-      supaPayload.imageurl = imageUrl
-    }
-    if (category !== undefined) supaPayload.category = category
-    if (ingredientsArray !== undefined) supaPayload.ingredients = ingredientsArray
-    if (updates.available !== undefined) supaPayload.available = updates.available
-    supaPayload.updatedat = new Date().toISOString()
-
-    const { data, error } = await supabase
-      .from('products')
-      .update(supaPayload)
-      .eq('id', id)
-      .select()
-      .maybeSingle()
-
-    if (!error && data) {
-      updatedRecord = formatProduct(data)
-    } else if (error) {
-      console.warn('Supabase update notice:', error.message)
-    }
-  } catch (e) {
-    console.warn('Supabase update error:', e)
+  let updatedRecord: ProductRecord = {
+    id,
+    name: updates.name !== undefined ? String(updates.name).trim() : (existing?.name || 'Bakery Item'),
+    description: updates.description !== undefined ? String(updates.description || '') : (existing?.description || ''),
+    price,
+    imageUrl: updates.imageUrl !== undefined ? String(updates.imageUrl || '') : (existing?.imageUrl || ''),
+    category: updates.category !== undefined ? String(updates.category).trim() || 'Pastry' : (existing?.category || 'Pastry'),
+    ingredients: ingredientsArray,
+    available: updates.available !== undefined ? updates.available : (existing ? existing.available : true),
+    createdAt: existing?.createdAt || nowIso,
+    updatedAt: nowIso,
+    _supabaseSynced: false,
   }
 
-  // 2. Upsert/update in Prisma (fail-safe for read-only Vercel SQLite)
   try {
-    const prismaPayload: any = {}
-    if (name !== undefined) prismaPayload.name = name
-    if (description !== undefined) prismaPayload.description = description
-    if (price !== undefined) prismaPayload.price = price
-    if (imageUrl !== undefined) prismaPayload.imageUrl = imageUrl
-    if (category !== undefined) prismaPayload.category = category
-    if (ingredientsStr !== undefined) prismaPayload.ingredients = ingredientsStr
-    if (updates.available !== undefined) prismaPayload.available = updates.available
+    const client = getSupabaseClient()
+    const supaPayload: Record<string, any> = {
+      updatedat: nowIso,
+    }
 
+    if (updates.name !== undefined) supaPayload.name = String(updates.name).trim()
+    if (updates.description !== undefined) supaPayload.description = String(updates.description || '')
+    if (updates.price !== undefined) supaPayload.price = price
+    if (updates.imageUrl !== undefined) supaPayload.imageurl = String(updates.imageUrl || '')
+    if (updates.category !== undefined) supaPayload.category = String(updates.category).trim() || 'Pastry'
+    if (updates.ingredients !== undefined) supaPayload.ingredients = ingredientsArray
+    if (updates.available !== undefined) supaPayload.available = updates.available
+
+    const { data: supaData, error: supaErr } = await withTimeout(
+      client.from('products').update(supaPayload).eq('id', id).select().maybeSingle(),
+      4000
+    )
+
+    if (!supaErr && supaData) {
+      updatedRecord = formatProduct(supaData)
+      updatedRecord._supabaseSynced = true
+    } else {
+      updatedRecord._supabaseSynced = false
+      if (supaErr) {
+        updatedRecord._supabaseWarning = `Supabase update rejected: ${supaErr.message} (Code: ${supaErr.code || 'unknown'}). On Vercel, updates will not persist until SUPABASE_SERVICE_ROLE_KEY is added or public RLS update policy is enabled.`
+        console.warn('Supabase product update notice:', supaErr.message)
+      } else if (!supaData) {
+        const { data: existingInSupa } = await withTimeout(
+          client.from('products').select('id').eq('id', id).maybeSingle(),
+          2000
+        ).catch(() => ({ data: null }))
+
+        if (existingInSupa) {
+          updatedRecord._supabaseWarning = `Product exists in Supabase, but Row Level Security (RLS) blocked the update (0 rows affected). On Vercel, updates will not reflect until SUPABASE_SERVICE_ROLE_KEY is added to Vercel Environment Variables or the SQL update policy is run in Supabase.`
+          console.warn('[Supabase RLS Restriction] Product update affected 0 rows due to RLS policy.')
+        } else {
+          const insertRes = await withTimeout(
+            client.from('products').insert({
+              id,
+              name: updatedRecord.name,
+              description: updatedRecord.description,
+              price: updatedRecord.price,
+              imageurl: updatedRecord.imageUrl,
+              category: updatedRecord.category,
+              ingredients: ingredientsArray,
+              available: updatedRecord.available,
+              createdat: nowIso,
+              updatedat: nowIso,
+            }).select().maybeSingle(),
+            3000
+          ).catch(() => null)
+
+          if (insertRes?.data) {
+            updatedRecord = formatProduct(insertRes.data)
+            updatedRecord._supabaseSynced = true
+          } else {
+            updatedRecord._supabaseWarning = `Product does not exist in Supabase and could not be inserted (RLS restriction). Add SUPABASE_SERVICE_ROLE_KEY in Vercel to sync.`
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Supabase product update exception:', e)
+  }
+
+  try {
     const prismaProduct = await prisma.product.upsert({
       where: { id },
-      update: prismaPayload,
+      update: {
+        name: updatedRecord.name,
+        description: updatedRecord.description || '',
+        price: updatedRecord.price,
+        imageUrl: updatedRecord.imageUrl || '',
+        category: updatedRecord.category,
+        ingredients: ingredientsStr,
+        available: updatedRecord.available,
+      },
       create: {
         id,
-        name: name || 'Bakery Item',
-        description: description || '',
-        price: price || 0,
-        imageUrl: imageUrl || '',
-        category: category || 'Pastry',
-        ingredients: ingredientsStr || '[]',
-        available: updates.available !== false,
+        name: updatedRecord.name,
+        description: updatedRecord.description || '',
+        price: updatedRecord.price,
+        imageUrl: updatedRecord.imageUrl || '',
+        category: updatedRecord.category,
+        ingredients: ingredientsStr,
+        available: updatedRecord.available,
       },
     })
 
-    if (!updatedRecord && prismaProduct) {
+    if (prismaProduct) {
+      const savedSynced = updatedRecord._supabaseSynced
+      const savedWarning = updatedRecord._supabaseWarning
       updatedRecord = {
         id: prismaProduct.id,
         name: prismaProduct.name,
@@ -506,98 +842,116 @@ export async function updateProduct(id: string, updates: Partial<ProductRecord>)
         available: prismaProduct.available,
         createdAt: prismaProduct.createdAt,
         updatedAt: prismaProduct.updatedAt,
+        _supabaseSynced: savedSynced,
+        _supabaseWarning: savedWarning,
       }
     }
   } catch (e) {
-    // Readonly SQLite catch
+    console.warn('Prisma product update notice:', e)
   }
 
-  // If both failed (e.g. offline memory fallback), build updated record from existing
-  if (!updatedRecord) {
-    const existing = await getProductById(id)
-    if (existing) {
-      updatedRecord = {
-        ...existing,
-        name: name !== undefined ? name : existing.name,
-        description: description !== undefined ? description : existing.description,
-        price: price !== undefined ? price : existing.price,
-        imageUrl: imageUrl !== undefined ? imageUrl : existing.imageUrl,
-        category: category !== undefined ? category : existing.category,
-        ingredients: ingredientsArray !== undefined ? ingredientsArray : existing.ingredients,
-        available: updates.available !== undefined ? updates.available : existing.available,
-        updatedAt: new Date().toISOString(),
-      }
-    }
-  }
+  deletedProductIds.delete(id)
+  await prisma.deletedProduct.deleteMany({ where: { id } }).catch(() => {})
+  updateMemoryCacheWithProduct(updatedRecord)
 
   return updatedRecord
 }
 
 /**
- * Delete a product from Supabase and Prisma
+ * Delete a product from Supabase and Prisma safely.
  */
 export async function deleteProduct(id: string): Promise<boolean> {
   let deleted = false
 
-  // 1. Delete from Supabase
   try {
-    const { error } = await databaseClient.from('products').delete().eq('id', id)
-    if (!error) deleted = true
+    const client = getSupabaseClient()
+    const { data: supaDeleted, error } = await withTimeout(
+      client.from('products').delete().eq('id', id).select(),
+      3500
+    )
+    if (!error && Array.isArray(supaDeleted) && supaDeleted.length > 0) {
+      deleted = true
+    } else if (error) {
+      console.warn('Supabase delete notice:', error.message)
+    } else if (Array.isArray(supaDeleted) && supaDeleted.length === 0) {
+      console.warn(`[Supabase RLS Warning] Supabase delete on product ${id} affected 0 rows due to RLS policy.`)
+    }
   } catch (e) {
     console.warn('Supabase delete notice:', e)
   }
 
-  // 2. Delete from Prisma
   try {
     await prisma.orderItem.deleteMany({ where: { productId: id } }).catch(() => {})
     const res = await prisma.product.deleteMany({ where: { id } }).catch(() => null)
     if (res && res.count > 0) deleted = true
   } catch (e) {
-    // Readonly SQLite catch
+    console.warn('Prisma delete notice:', e)
   }
+
+  try {
+    await prisma.deletedProduct.upsert({
+      where: { id },
+      create: { id },
+      update: {},
+    }).catch(() => {})
+  } catch {}
+
+  removeProductFromMemoryCache(id)
 
   return deleted
 }
 
 /**
- * Save order to Supabase
+ * Mirror order and order items to Supabase safely.
+ * Uses exact PostgreSQL lowercase column schema to prevent PostgREST errors.
  */
 export async function saveOrderToSupabase(orderData: any, orderItems: any[]) {
   try {
-    const { data: order, error } = await databaseClient
-      .from('orders')
-      .insert({
-        id: orderData.id,
-        userId: orderData.userId || null,
-        totalAmount: orderData.totalAmount,
-        status: orderData.status || 'PENDING',
-        orderType: orderData.orderType || 'RETAIL',
-        deliveryType: orderData.deliveryType || 'PICKUP',
-        deliveryAddress: orderData.deliveryAddress || null,
-        deliveryDate: orderData.deliveryDate || null,
-        customerName: orderData.customerName,
-        customerEmail: orderData.customerEmail,
-        customerPhone: orderData.customerPhone,
-        customerNote: orderData.customerNote || null,
-        paystackReference: orderData.paystackReference || null,
-      })
-      .select()
-      .single()
+    const client = getSupabaseClient()
+    const nowIso = new Date().toISOString()
+
+    const orderPayload = {
+      id: String(orderData.id),
+      userid: orderData.userId ? String(orderData.userId) : null,
+      totalamount: Number(orderData.totalAmount) || 0,
+      status: String(orderData.status || 'PENDING'),
+      ordertype: String(orderData.orderType || 'RETAIL'),
+      deliverytype: String(orderData.deliveryType || 'PICKUP'),
+      deliveryaddress: orderData.deliveryAddress ? String(orderData.deliveryAddress) : null,
+      deliverydate: orderData.deliveryDate ? new Date(orderData.deliveryDate).toISOString() : null,
+      customername: String(orderData.customerName || 'Valued Customer'),
+      customeremail: String(orderData.customerEmail || ''),
+      customerphone: String(orderData.customerPhone || ''),
+      customernote: orderData.customerNote ? String(orderData.customerNote) : null,
+      paystackreference: orderData.paystackReference ? String(orderData.paystackReference) : null,
+      createdat: orderData.createdAt ? new Date(orderData.createdAt).toISOString() : nowIso,
+      updatedat: nowIso,
+    }
+
+    const { data: order, error } = await withTimeout(
+      client.from('orders').insert(orderPayload).select().maybeSingle(),
+      4000
+    )
 
     if (!error && order) {
-      if (orderItems.length > 0) {
+      if (orderItems && orderItems.length > 0) {
         const itemsToInsert = orderItems.map((item) => ({
-          orderId: order.id,
-          productId: item.productId,
-          quantity: item.quantity,
-          price: item.price,
+          id: crypto.randomUUID(),
+          orderid: order.id,
+          productid: String(item.productId),
+          quantity: Number(item.quantity) || 1,
+          price: Number(item.price) || 0,
+          createdat: nowIso,
         }))
-        await databaseClient.from('order_items').insert(itemsToInsert)
+
+        await withTimeout(client.from('order_items').insert(itemsToInsert), 4000)
       }
       return { success: true, order }
+    } else if (error) {
+      console.warn('Supabase order insert notice:', error.message)
     }
   } catch (err) {
-    console.warn('Could not sync order to Supabase:', err)
+    console.warn('Supabase order mirror notice:', err)
   }
   return { success: false }
 }

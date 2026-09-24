@@ -1,7 +1,15 @@
 import { NextResponse } from 'next/server';
 import { getProducts, createProduct } from '@/lib/supabase-service';
+import { revalidatePath } from 'next/cache';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+const NO_CACHE_HEADERS = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+};
 
 const MAX_IMAGE_URL_LENGTH = 2_000_000;
 
@@ -31,7 +39,9 @@ function validateProductPayload(body: unknown) {
 export async function GET() {
   try {
     const products = await getProducts();
-    return NextResponse.json(products);
+    return NextResponse.json(products, {
+      headers: NO_CACHE_HEADERS,
+    });
   } catch (error) {
     console.error('Error fetching products:', error);
     return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 });
@@ -62,7 +72,16 @@ export async function POST(request: Request) {
       available: product.available !== false,
     });
 
-    return NextResponse.json(created, { status: 201 });
+    try {
+      revalidatePath('/products');
+      revalidatePath('/');
+      revalidatePath('/admin/products');
+    } catch {}
+
+    return NextResponse.json(created, {
+      status: 201,
+      headers: NO_CACHE_HEADERS,
+    });
   } catch (error) {
     console.error('Error creating product:', error);
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Failed to create product' }, { status: 500 });

@@ -1,12 +1,18 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Database, CheckCircle2, AlertCircle, RefreshCw, Copy, ExternalLink } from 'lucide-react'
+import { Database, CheckCircle2, AlertCircle, RefreshCw, Copy, ExternalLink, Key } from 'lucide-react'
 
 export default function SupabaseSyncBanner() {
   const [status, setStatus] = useState<{
     connected: boolean
     tablesReady: boolean
+    productsReady?: boolean
+    ordersReady?: boolean
+    orderItemsReady?: boolean
+    hasServiceRole?: boolean
+    isKeyMalformed?: boolean
+    canWriteProducts?: boolean
     message: string
   } | null>(null)
   const [loading, setLoading] = useState(true)
@@ -30,60 +36,97 @@ export default function SupabaseSyncBanner() {
     checkStatus()
   }, [])
 
-  const copySql = () => {
-    const sqlContent = `-- Supabase Schema for Eno's Pastries
+  const sqlContent = `-- ==========================================
+-- SUPABASE COMPLETE SETUP & PERMISSIONS SCRIPT
+-- For Eno's Pastries (Resolves Vercel & RLS update issues)
+-- ==========================================
+
+-- 1. Create tables if they do not exist
 CREATE TABLE IF NOT EXISTS public.products (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   name TEXT NOT NULL,
   description TEXT,
   price NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
-  imageUrl TEXT,
+  imageurl TEXT,
   category TEXT NOT NULL DEFAULT 'Pastry',
   ingredients JSONB DEFAULT '[]'::jsonb,
   available BOOLEAN DEFAULT true,
-  createdAt TIMESTAMPTZ DEFAULT now(),
-  updatedAt TIMESTAMPTZ DEFAULT now()
+  createdat TIMESTAMPTZ DEFAULT now(),
+  updatedat TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS public.orders (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  userId TEXT,
-  totalAmount NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+  userid TEXT,
+  totalamount NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
   status TEXT NOT NULL DEFAULT 'PENDING',
-  orderType TEXT NOT NULL DEFAULT 'RETAIL',
-  deliveryType TEXT NOT NULL DEFAULT 'PICKUP',
-  deliveryAddress TEXT,
-  deliveryDate TIMESTAMPTZ,
-  customerName TEXT NOT NULL,
-  customerEmail TEXT NOT NULL,
-  customerPhone TEXT NOT NULL,
-  customerNote TEXT,
-  paystackReference TEXT UNIQUE,
-  createdAt TIMESTAMPTZ DEFAULT now(),
-  updatedAt TIMESTAMPTZ DEFAULT now()
+  ordertype TEXT NOT NULL DEFAULT 'RETAIL',
+  deliverytype TEXT NOT NULL DEFAULT 'PICKUP',
+  deliveryaddress TEXT,
+  deliverydate TIMESTAMPTZ,
+  customername TEXT NOT NULL,
+  customeremail TEXT NOT NULL,
+  customerphone TEXT NOT NULL,
+  customernote TEXT,
+  paystackreference TEXT UNIQUE,
+  createdat TIMESTAMPTZ DEFAULT now(),
+  updatedat TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS public.order_items (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  orderId TEXT NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
-  productId TEXT NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
+  orderid TEXT NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
+  productid TEXT NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
   quantity INTEGER NOT NULL DEFAULT 1,
   price NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
-  createdAt TIMESTAMPTZ DEFAULT now()
+  createdat TIMESTAMPTZ DEFAULT now()
 );
 
+-- 2. Grant schema and table permissions to anon, authenticated, and service_role
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+
+-- 3. Row Level Security Policies
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.order_items ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Public can view active products" ON public.products;
 CREATE POLICY "Public can view active products" ON public.products FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Allow all modifications on products" ON public.products;
 CREATE POLICY "Allow all modifications on products" ON public.products FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public can insert products" ON public.products;
+CREATE POLICY "Public can insert products" ON public.products FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public can update products" ON public.products;
+CREATE POLICY "Public can update products" ON public.products FOR UPDATE USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public can delete products" ON public.products;
+CREATE POLICY "Public can delete products" ON public.products FOR DELETE USING (true);
+
+DROP POLICY IF EXISTS "Public can insert orders" ON public.orders;
 CREATE POLICY "Public can insert orders" ON public.orders FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public can view orders" ON public.orders;
 CREATE POLICY "Public can view orders" ON public.orders FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Public can update orders" ON public.orders;
 CREATE POLICY "Public can update orders" ON public.orders FOR UPDATE USING (true);
+
+DROP POLICY IF EXISTS "Public can insert order items" ON public.order_items;
 CREATE POLICY "Public can insert order items" ON public.order_items FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public can view order items" ON public.order_items;
 CREATE POLICY "Public can view order items" ON public.order_items FOR SELECT USING (true);`
 
+  const copySql = () => {
     navigator.clipboard.writeText(sqlContent)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
@@ -97,19 +140,27 @@ CREATE POLICY "Public can view order items" ON public.order_items FOR SELECT USI
             <Database className="w-5 h-5" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-sm font-black text-stone-900">Supabase Cloud Database</h3>
               {loading ? (
                 <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 flex items-center gap-1">
                   <RefreshCw className="w-3 h-3 animate-spin" /> Checking
                 </span>
-              ) : status?.tablesReady ? (
+              ) : status?.tablesReady && status?.canWriteProducts ? (
                 <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
-                  <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Active & Synced
+                  <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Active & Fully Synced (Read/Write)
+                </span>
+              ) : status?.tablesReady && !status?.canWriteProducts ? (
+                <span className="text-[11px] font-bold text-amber-900 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3 text-amber-700" /> Read Active — Updates Restricted by RLS
+                </span>
+              ) : status?.productsReady ? (
+                <span className="text-[11px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3 text-amber-700" /> Products Active (Orders Tables Setup Needed)
                 </span>
               ) : (
-                <span className="text-[11px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300 flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3 text-amber-700" /> Connected (Tables Pending)
+                <span className="text-[11px] font-bold text-rose-800 bg-rose-100 px-2 py-0.5 rounded-full border border-rose-300 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3 text-rose-700" /> Tables Setup Required
                 </span>
               )}
             </div>
@@ -148,11 +199,56 @@ CREATE POLICY "Public can view order items" ON public.order_items FOR SELECT USI
         </div>
       </div>
 
+      {status?.isKeyMalformed && !loading && (
+        <div className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 text-xs text-stone-700 space-y-2">
+          <div className="font-bold text-rose-900 flex items-center gap-1.5">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            SUPABASE_SERVICE_ROLE_KEY format incorrect in Vercel
+          </div>
+          <p className="leading-relaxed text-stone-600">
+            The configured key appears to be a database password (short string). Supabase service role keys are JWT tokens that start with <code className="bg-white text-rose-950 font-mono px-1 py-0.5 rounded text-[11px]">eyJ...</code>.
+          </p>
+          <p className="text-[11px] text-stone-600">
+            Copy the secret key from: <strong>Supabase Dashboard &gt; Project Settings (gear icon) &gt; API &gt; Project API keys &gt; &apos;service_role&apos; (secret)</strong>, and paste it into Vercel.
+          </p>
+        </div>
+      )}
+
+      {status && !status.canWriteProducts && !status.isKeyMalformed && !loading && (
+        <div className="bg-amber-50/90 border border-amber-200/90 rounded-xl p-3.5 text-xs text-stone-700 space-y-2">
+          <div className="font-bold text-amber-900 flex items-center gap-1.5">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+            Why updated products don&apos;t show on Vercel:
+          </div>
+          <p className="leading-relaxed text-stone-600">
+            On Vercel, serverless functions run without a permanent local database. In Supabase, Row Level Security (RLS) is currently preventing product updates and inserts. To make product updates show immediately on Vercel:
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 font-semibold text-stone-800">
+            <div className="bg-white p-3 rounded-xl border border-amber-200 shadow-xs">
+              <span className="text-amber-900 font-black flex items-center gap-1.5 mb-1">
+                <Key className="w-3.5 h-3.5 text-amber-700" /> Option 1 (Recommended):
+              </span>
+              <p className="text-[11px] font-normal text-stone-600 leading-snug">
+                Add <code className="bg-stone-100 text-amber-950 font-mono px-1 py-0.5 rounded text-[11px]">SUPABASE_SERVICE_ROLE_KEY</code> in your <strong>Vercel Project Settings &gt; Environment Variables</strong>.
+              </p>
+            </div>
+            <div className="bg-white p-3 rounded-xl border border-amber-200 shadow-xs">
+              <span className="text-amber-900 font-black flex items-center gap-1.5 mb-1">
+                <Copy className="w-3.5 h-3.5 text-amber-700" /> Option 2:
+              </span>
+              <p className="text-[11px] font-normal text-stone-600 leading-snug">
+                Click <strong>View SQL Setup</strong> below, copy the SQL, and paste it into the <strong>Supabase SQL Editor</strong> to enable public update permissions.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showSql && (
         <div className="mt-3 pt-3 border-t border-stone-100 space-y-2">
           <div className="flex items-center justify-between">
             <p className="text-xs font-bold text-stone-700">
-              Run this in your Supabase SQL Editor to create tables & enable RLS:
+              Run this in your Supabase SQL Editor to enable tables & update permissions:
             </p>
             <button
               onClick={copySql}
@@ -162,40 +258,12 @@ CREATE POLICY "Public can view order items" ON public.order_items FOR SELECT USI
               {copied ? 'Copied SQL!' : 'Copy SQL'}
             </button>
           </div>
-          <pre className="bg-stone-950 text-emerald-400 p-3 rounded-xl text-[11px] font-mono overflow-x-auto max-h-48 scrollbar-thin">
-{`CREATE TABLE IF NOT EXISTS public.products (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  name TEXT NOT NULL,
-  description TEXT,
-  price NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
-  imageUrl TEXT,
-  category TEXT NOT NULL DEFAULT 'Pastry',
-  ingredients JSONB DEFAULT '[]'::jsonb,
-  available BOOLEAN DEFAULT true,
-  createdAt TIMESTAMPTZ DEFAULT now(),
-  updatedAt TIMESTAMPTZ DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS public.orders (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  userId TEXT,
-  totalAmount NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
-  status TEXT NOT NULL DEFAULT 'PENDING',
-  orderType TEXT NOT NULL DEFAULT 'RETAIL',
-  deliveryType TEXT NOT NULL DEFAULT 'PICKUP',
-  deliveryAddress TEXT,
-  deliveryDate TIMESTAMPTZ,
-  customerName TEXT NOT NULL,
-  customerEmail TEXT NOT NULL,
-  customerPhone TEXT NOT NULL,
-  customerNote TEXT,
-  paystackReference TEXT UNIQUE,
-  createdAt TIMESTAMPTZ DEFAULT now(),
-  updatedAt TIMESTAMPTZ DEFAULT now()
-);`}
+          <pre className="bg-stone-950 text-emerald-400 p-3 rounded-xl text-[11px] font-mono overflow-x-auto max-h-56 scrollbar-thin">
+            {sqlContent}
           </pre>
         </div>
       )}
     </div>
   )
 }
+
