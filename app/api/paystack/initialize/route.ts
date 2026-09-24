@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import crypto from 'crypto'
-import { saveOrderToSupabase } from '@/lib/supabase-service'
+import { getProducts, saveOrderToSupabase } from '@/lib/supabase-service'
 
 function ghp(amount: number) {
   // Paystack expects amount in minor units (kobo/pesewas)
@@ -32,15 +32,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Cart is empty' }, { status: 400 })
     }
 
-    // Resolve product IDs to ensure foreign key integrity
+    // Resolve products from the same Supabase-backed source used by the storefront.
     const itemsToCreate = []
-    const allProducts = await prisma.product.findMany()
+    const localProducts = await prisma.product.findMany()
+    const remoteProducts = await getProducts()
 
     for (const item of items) {
       let pid = item.productId || item.id
-      let matched = allProducts.find(p => p.id === pid)
+      let matched = localProducts.find(p => p.id === pid) || remoteProducts.find(p => p.id === pid)
       if (!matched && item.name) {
-        matched = allProducts.find(p => p.name.toLowerCase() === String(item.name).toLowerCase())
+        const normalizedName = String(item.name).trim().toLowerCase()
+        matched = localProducts.find(p => p.name.toLowerCase() === normalizedName) ||
+          remoteProducts.find(p => p.name.toLowerCase() === normalizedName)
       }
       if (!matched) {
         return NextResponse.json({ error: 'One or more products are no longer available' }, { status: 400 })
@@ -51,10 +54,39 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Each product quantity must be a whole number from 1 to 100' }, { status: 400 })
       }
 
+      const productId = matched.id
+      const price = Number(matched.price) || 0
+
+      // Orders use Prisma relations, so ensure a Supabase-only product exists locally.
+      if (!localProducts.some((product) => product.id === productId)) {
+        await prisma.product.upsert({
+          where: { id: productId },
+          update: {
+            name: matched.name,
+            description: matched.description || '',
+            price,
+            imageUrl: matched.imageUrl || '',
+            category: matched.category || 'Pastry',
+            ingredients: JSON.stringify(matched.ingredients || []),
+            available: matched.available !== false,
+          },
+          create: {
+            id: productId,
+            name: matched.name,
+            description: matched.description || '',
+            price,
+            imageUrl: matched.imageUrl || '',
+            category: matched.category || 'Pastry',
+            ingredients: JSON.stringify(matched.ingredients || []),
+            available: matched.available !== false,
+          },
+        })
+      }
+
       itemsToCreate.push({
-        productId: matched.id,
+        productId,
         quantity,
-        price: Number(matched.price) || 0,
+        price,
       })
     }
 
