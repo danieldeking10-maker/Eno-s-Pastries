@@ -16,32 +16,30 @@ import {
   BarChart2,
   QrCode,
   LayoutDashboard,
-  Copy,
-  Check,
 } from 'lucide-react'
 
 const ADMIN_PASSCODE = 'eno123ama'
-const AUTH_STORAGE_KEY = 'enos_admin_authenticated'
+const AUTH_STORAGE_KEY = 'enos_admin_session_auth'
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [passcode, setPasscode] = useState('')
   const [showPasscode, setShowPasscode] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      // Clear legacy permanent localStorage flag so users are prompted
+      localStorage.removeItem('enos_admin_authenticated')
+
       const params = new URLSearchParams(window.location.search)
       if (params.get('lock') === 'true' || params.get('logout') === 'true') {
         sessionStorage.removeItem(AUTH_STORAGE_KEY)
-        localStorage.removeItem(AUTH_STORAGE_KEY)
         setIsAuthenticated(false)
         return
       }
 
-      const savedAuth =
-        sessionStorage.getItem(AUTH_STORAGE_KEY) || localStorage.getItem(AUTH_STORAGE_KEY)
+      const savedAuth = sessionStorage.getItem(AUTH_STORAGE_KEY)
       if (savedAuth === 'true') {
         setIsAuthenticated(true)
       } else {
@@ -57,32 +55,25 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     if (passcode.trim() === ADMIN_PASSCODE) {
       if (typeof window !== 'undefined') {
         sessionStorage.setItem(AUTH_STORAGE_KEY, 'true')
-        localStorage.setItem(AUTH_STORAGE_KEY, 'true')
       }
       setIsAuthenticated(true)
       setPasscode('')
     } else {
-      setError(`Incorrect admin passcode. The passcode is: ${ADMIN_PASSCODE}`)
+      setError('Incorrect passcode. Please enter the valid admin passcode.')
     }
   }
 
   const handleLogout = () => {
     if (typeof window !== 'undefined') {
       sessionStorage.removeItem(AUTH_STORAGE_KEY)
-      localStorage.removeItem(AUTH_STORAGE_KEY)
+      localStorage.removeItem('enos_admin_authenticated')
     }
     setIsAuthenticated(false)
     setPasscode('')
     setError(null)
   }
 
-  const copyPasscode = () => {
-    navigator.clipboard.writeText(ADMIN_PASSCODE)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  // Verification state while checking local/session storage
+  // Verification state while checking session storage
   if (isAuthenticated === null) {
     return (
       <div className="min-h-screen bg-amber-50 flex items-center justify-center p-4">
@@ -118,44 +109,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
             <h1 className="text-2xl font-black text-amber-950">Eno&apos;s Pastries Admin</h1>
             <p className="text-stone-600 text-xs mt-1.5 leading-relaxed">
-              Access to management tools, inventory controls, order fulfillment, and analytics is restricted to authorized personnel.
+              Enter the admin passcode to access order fulfillment, inventory management, and store analytics.
             </p>
-          </div>
-
-          {/* Passcode Quick Display Card with Auto-fill & Copy */}
-          <div className="bg-amber-50 border border-amber-200/90 rounded-2xl p-4 mb-4 shadow-xs">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
-                <KeyRound className="w-3.5 h-3.5 text-amber-600" /> Admin Passcode
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setPasscode(ADMIN_PASSCODE)
-                  setError(null)
-                }}
-                className="text-[11px] font-bold text-amber-800 hover:text-amber-950 bg-amber-200/70 hover:bg-amber-200 px-2 py-0.5 rounded-md transition-colors cursor-pointer"
-              >
-                Auto-fill
-              </button>
-            </div>
-            <div className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-amber-200">
-              <span className="font-mono font-black text-amber-950 text-base tracking-wider">
-                {ADMIN_PASSCODE}
-              </span>
-              <button
-                type="button"
-                onClick={copyPasscode}
-                className="text-xs font-bold text-stone-600 hover:text-stone-900 flex items-center gap-1 cursor-pointer"
-              >
-                {copied ? (
-                  <Check className="w-3.5 h-3.5 text-emerald-600" />
-                ) : (
-                  <Copy className="w-3.5 h-3.5 text-stone-400" />
-                )}
-                <span>{copied ? 'Copied!' : 'Copy'}</span>
-              </button>
-            </div>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
@@ -164,7 +119,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 htmlFor="admin-passcode"
                 className="block text-xs font-bold text-stone-700 mb-1.5 flex items-center gap-1.5"
               >
-                <KeyRound className="w-3.5 h-3.5 text-amber-600" /> Enter Passcode
+                <KeyRound className="w-3.5 h-3.5 text-amber-600" /> Admin Passcode
               </label>
               <div className="relative">
                 <input
@@ -172,7 +127,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   type={showPasscode ? 'text' : 'password'}
                   value={passcode}
                   onChange={(e) => setPasscode(e.target.value)}
-                  placeholder="Enter passcode..."
+                  placeholder="Enter admin passcode..."
                   required
                   autoFocus
                   className="w-full pl-4 pr-11 py-3 border-2 border-amber-200 rounded-xl focus:border-amber-600 focus:outline-none text-stone-900 text-sm font-mono transition-colors"
@@ -200,7 +155,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               className="w-full py-3.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-bold text-sm rounded-xl shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
             >
               <ShieldCheck className="w-4 h-4" />
-              <span>Authenticate Admin</span>
+              <span>Unlock Admin Access</span>
             </button>
           </form>
 
@@ -217,7 +172,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   // Render authenticated layout with top navigation bar and child routes
   return (
     <div className="min-h-screen bg-amber-50">
-      {/* Admin Top Navigation & Passcode Bar */}
+      {/* Admin Top Navigation */}
       <div className="bg-amber-950 text-amber-100 text-xs py-2 px-4 sm:px-8 flex items-center justify-between shadow-md border-b border-amber-900 gap-2 flex-wrap">
         <div className="flex items-center gap-3">
           <Link href="/admin" className="flex items-center gap-2 hover:text-amber-300 transition-colors">
