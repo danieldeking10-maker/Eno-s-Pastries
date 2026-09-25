@@ -696,7 +696,7 @@ export default function UserDashboardPage() {
                     searchMode === 'email'
                       ? 'Enter your email address (e.g. customer@example.com)'
                       : searchMode === 'phone'
-                      ? 'Enter your phone number (e.g. 0534716125)'
+                      ? 'Enter your phone number (e.g. 024 123 4567)'
                       : 'Enter email address, phone number, or Order ID'
                   }
                   required

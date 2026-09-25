@@ -4,11 +4,10 @@ import { useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import Header from '@/components/Header'
-import { Product } from '@/components/ProductCard'
 import { useCart } from '@/components/CartProvider'
 
 export default function CartPage() {
-  const { cart, removeFromCart, clearCart, cartTotal } = useCart()
+  const { cart, removeFromCart, cartTotal } = useCart()
   const [showCheckout, setShowCheckout] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [checkoutForm, setCheckoutForm] = useState({
@@ -210,7 +209,7 @@ export default function CartPage() {
                         value={checkoutForm.customerPhone}
                         onChange={(e) => setCheckoutForm({ ...checkoutForm, customerPhone: e.target.value })}
                         className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300"
-                        placeholder="0534716125"
+                        placeholder="024 123 4567"
                       />
                     </div>
                     <div>

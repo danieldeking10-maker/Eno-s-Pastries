@@ -51,35 +51,39 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    try {
-      if (typeof window !== 'undefined') {
-        const savedCart = localStorage.getItem('enosPastriesCart');
-        if (savedCart) {
-          const parsed = JSON.parse(savedCart);
-          if (Array.isArray(parsed)) {
-            const normalizedCart = parsed
-              .map(normalizeCartItem)
-              .filter((item): item is Product => item !== null);
-            setCart(normalizedCart);
-          }
-        }
+    let cancelled = false;
+
+    async function loadCart() {
+      try {
+        const response = await fetch('/api/cart', { cache: 'no-store' });
+        if (!response.ok) throw new Error('Cart storage is unavailable');
+        const data = await response.json().catch(() => ({}));
+        const normalizedCart = Array.isArray(data?.cart)
+          ? data.cart.map(normalizeCartItem).filter((item): item is Product => item !== null)
+          : [];
+        if (!cancelled) setCart(normalizedCart);
+      } catch (err) {
+        console.error('Error loading cart from Supabase Storage:', err);
+      } finally {
+        if (!cancelled) setIsLoaded(true);
       }
-    } catch (err) {
-      console.error('Error loading cart from localStorage:', err);
-    } finally {
-      setIsLoaded(true);
     }
+
+    void loadCart();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
     if (!isLoaded) return;
-    try {
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('enosPastriesCart', JSON.stringify(cart));
-      }
-    } catch (err) {
-      console.error('Error saving cart to localStorage:', err);
-    }
+    void fetch('/api/cart', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cart }),
+    }).catch((err) => {
+      console.error('Error saving cart to Supabase Storage:', err);
+    });
   }, [cart, isLoaded]);
 
   const addToCart = (product: Product) => {
