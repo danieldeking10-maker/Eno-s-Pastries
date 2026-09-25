@@ -26,29 +26,39 @@ export async function GET(request: Request) {
 
     const verifyData = await verifyRes.json().catch(() => ({}))
 
-    if (verifyRes.ok && verifyData?.data?.status === 'success') {
-      const orderId = verifyData?.data?.metadata?.orderId
+    const transaction = verifyData?.data
+    const orderId = transaction?.metadata?.orderId
+    const order = await prisma.order.findUnique({ where: { paystackReference: reference } })
 
-      if (orderId) {
-        await prisma.order.updateMany({
-          where: { id: orderId, paystackReference: reference },
-          data: { status: 'CONFIRMED' },
-        })
-      } else {
-        await prisma.order.updateMany({
-          where: { paystackReference: reference },
-          data: { status: 'CONFIRMED' },
-        })
+    if (!verifyRes.ok || !transaction || !order || order.id !== orderId) {
+      return NextResponse.redirect(`${origin}/dashboard?payment=error`)
+    }
+
+    const expectedAmount = Math.round(Number(order.totalAmount) * 100)
+    const transactionEmail = String(transaction.customer?.email || transaction.email || '').trim().toLowerCase()
+
+    if (transaction.status === 'success') {
+      if (transaction.amount !== expectedAmount || transactionEmail !== order.customerEmail.trim().toLowerCase()) {
+        console.error('Paystack callback mismatch for order:', order.id)
+        return NextResponse.redirect(`${origin}/dashboard?payment=error`)
       }
 
-      return NextResponse.redirect(`${origin}/dashboard?payment=success&ref=${reference}`)
-    } else {
       await prisma.order.updateMany({
-        where: { paystackReference: reference },
+        where: { id: order.id, paystackReference: reference, status: 'PENDING' },
+        data: { status: 'CONFIRMED' },
+      })
+      return NextResponse.redirect(`${origin}/dashboard?payment=success&ref=${reference}`)
+    }
+
+    if (['failed', 'abandoned', 'reversed'].includes(transaction.status)) {
+      await prisma.order.updateMany({
+        where: { id: order.id, paystackReference: reference, status: 'PENDING' },
         data: { status: 'CANCELLED' },
       })
       return NextResponse.redirect(`${origin}/dashboard?payment=failed`)
     }
+
+    return NextResponse.redirect(`${origin}/dashboard?payment=pending&ref=${reference}`)
   } catch (error) {
     console.error('Paystack callback error:', error)
     return NextResponse.redirect(`${origin}/dashboard?payment=error`)

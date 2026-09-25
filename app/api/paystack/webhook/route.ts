@@ -39,26 +39,39 @@ export async function POST(request: Request) {
 
     const verifyData = await verifyRes.json().catch(() => ({}))
 
-    const isSuccessful = verifyRes.ok && verifyData?.data?.status === 'success'
+    const transaction = verifyData?.data
+    const order = await prisma.order.findUnique({ where: { paystackReference: reference } })
 
-    if (!isSuccessful) {
-      if (!verifyRes.ok || !verifyData?.data?.status) {
-        return NextResponse.json({ error: 'Unable to verify transaction' }, { status: 502 })
+    if (!verifyRes.ok || !transaction || !order) {
+      return NextResponse.json({ error: 'Unable to match transaction to order' }, { status: 422 })
+    }
+
+    const orderId = transaction.metadata?.orderId
+    const expectedAmount = Math.round(Number(order.totalAmount) * 100)
+    const transactionEmail = String(transaction.customer?.email || transaction.email || '').trim().toLowerCase()
+
+    if (order.id !== orderId) {
+      return NextResponse.json({ error: 'Transaction metadata does not match order' }, { status: 422 })
+    }
+
+    if (transaction.status === 'success') {
+      if (transaction.amount !== expectedAmount || transactionEmail !== order.customerEmail.trim().toLowerCase()) {
+        return NextResponse.json({ error: 'Transaction details do not match order' }, { status: 422 })
       }
 
-      // A verified non-success status is safe to mark as cancelled.
       await prisma.order.updateMany({
-        where: { paystackReference: reference },
-        data: { status: 'CANCELLED' },
+        where: { id: order.id, paystackReference: reference, status: 'PENDING' },
+        data: { status: 'CONFIRMED' },
       })
-
       return NextResponse.json({ ok: true })
     }
 
-    await prisma.order.updateMany({
-      where: { paystackReference: reference },
-      data: { status: 'CONFIRMED' },
-    })
+    if (['failed', 'abandoned', 'reversed'].includes(transaction.status)) {
+      await prisma.order.updateMany({
+        where: { id: order.id, paystackReference: reference, status: 'PENDING' },
+        data: { status: 'CANCELLED' },
+      })
+    }
 
     return NextResponse.json({ ok: true })
   } catch (error) {

@@ -98,7 +98,8 @@ export async function POST(request: Request) {
     const order = await prisma.order.create({
       data: {
         totalAmount,
-        status: body.status ?? 'PENDING',
+        // Public callers cannot mark an order as paid or fulfilled.
+        status: 'PENDING',
         orderType: body.orderType ?? 'RETAIL',
         deliveryType: body.deliveryType ?? 'PICKUP',
         deliveryAddress: body.deliveryAddress,

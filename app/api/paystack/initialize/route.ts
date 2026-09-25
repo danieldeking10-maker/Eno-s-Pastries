@@ -8,6 +8,10 @@ function ghp(amount: number) {
   return Math.round(amount * 100)
 }
 
+function normalizeLookupValue(value: unknown) {
+  return String(value ?? '').trim().toLowerCase()
+}
+
 export async function POST(request: Request) {
   try {
     const reqBody = await request.json().catch(() => ({}))
@@ -35,7 +39,8 @@ export async function POST(request: Request) {
     // Resolve products from the same Supabase-backed source used by the storefront.
     const itemsToCreate = []
     const localProducts = await prisma.product.findMany()
-    const remoteProducts = await getProducts()
+    // Do not validate checkout against a stale 15-second product cache.
+    const remoteProducts = await getProducts(true)
 
     for (const item of items) {
       const rawProductId = item?.productId ?? item?.id ?? item?.product?.id ?? null
@@ -46,21 +51,29 @@ export async function POST(request: Request) {
           : ''
 
       let matched = null
-      const normalizedProductId = rawProductId ? String(rawProductId).trim() : ''
+      const normalizedProductId = normalizeLookupValue(rawProductId)
 
       if (normalizedProductId) {
-        matched = localProducts.find(p => String(p.id).trim() === normalizedProductId) ||
-          remoteProducts.find(p => String(p.id).trim() === normalizedProductId)
+        matched = remoteProducts.find(p => normalizeLookupValue(p.id) === normalizedProductId) ||
+          localProducts.find(p => normalizeLookupValue(p.id) === normalizedProductId)
       }
 
       if (!matched && rawName) {
-        const normalizedName = String(rawName).trim().toLowerCase()
-        matched = localProducts.find(p => String(p.name || '').trim().toLowerCase() === normalizedName) ||
-          remoteProducts.find(p => String(p.name || '').trim().toLowerCase() === normalizedName)
+        const normalizedName = normalizeLookupValue(rawName)
+        matched = remoteProducts.find(p => normalizeLookupValue(p.name) === normalizedName) ||
+          localProducts.find(p => normalizeLookupValue(p.name) === normalizedName)
       }
 
       if (!matched) {
-        return NextResponse.json({ error: 'One or more products are no longer available' }, { status: 400 })
+        return NextResponse.json({
+          error: `Product "${rawName || rawProductId || 'Unknown'}" could not be found. Please refresh the products page and try again.`,
+        }, { status: 400 })
+      }
+
+      if (matched.available === false) {
+        return NextResponse.json({
+          error: `Product "${matched.name}" is currently out of stock.`,
+        }, { status: 409 })
       }
 
       const quantity = Number(item?.quantity ?? item?.qty ?? 1)
@@ -112,6 +125,10 @@ export async function POST(request: Request) {
 
     const calculatedTotal = itemsToCreate.reduce((sum, item) => sum + item.price * item.quantity, 0)
 
+    if (!Number.isFinite(calculatedTotal) || calculatedTotal <= 0) {
+      return NextResponse.json({ error: 'Order total must be greater than zero' }, { status: 400 })
+    }
+
     const order = await prisma.order.create({
       data: {
         totalAmount: calculatedTotal,
@@ -131,21 +148,22 @@ export async function POST(request: Request) {
       include: { items: true },
     })
 
-    // Mirror to Supabase if table is ready
-    try {
-      await saveOrderToSupabase(order, itemsToCreate)
-    } catch (e) {
-      console.warn('Supabase sync skipped:', e)
-    }
-
     const reference = `order_${order.id}_${crypto.randomBytes(4).toString('hex')}`
 
-    await prisma.order.update({
+    const orderWithReference = await prisma.order.update({
       where: { id: order.id },
       data: {
         paystackReference: reference,
       },
+      include: { items: true },
     })
+
+    // Mirror only after the Paystack reference has been assigned.
+    try {
+      await saveOrderToSupabase(orderWithReference, itemsToCreate)
+    } catch (e) {
+      console.warn('Supabase sync skipped:', e)
+    }
 
     const rawKey = process.env.PAYSTACK_SECRET_KEY || ''
     const PAYSTACK_SECRET_KEY = rawKey.replace(/['"\r\n\s]/g, '').trim()

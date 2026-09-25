@@ -432,7 +432,9 @@ export async function getProducts(forceRefresh = false): Promise<ProductRecord[]
     const client = getSupabaseClient()
     const { data, error } = await withTimeout(client.from('products').select('*'), 3500)
 
-    if (!error && Array.isArray(data)) {
+    if (error) {
+      console.warn('Supabase products fetch warning:', error.message)
+    } else if (Array.isArray(data)) {
       supaProducts = data.map(formatProduct)
     }
   } catch (err) {

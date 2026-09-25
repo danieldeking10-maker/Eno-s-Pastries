@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { Product } from './ProductCard';
 
 type CartContextType = {
@@ -96,9 +96,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const clearCart = () => {
+  const clearCart = useCallback(() => {
     setCart([]);
-  };
+  }, []);
 
   const cartCount = cart.length;
   const cartTotal = cart.reduce((sum, product) => sum + (Number(product?.price) || 0), 0);

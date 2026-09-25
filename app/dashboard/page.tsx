@@ -297,25 +297,39 @@ export default function UserDashboardPage() {
       const urlParams = new URLSearchParams(window.location.search)
       const payment = urlParams.get('payment')
       const ref = urlParams.get('ref')
-      if (payment === 'success') {
-        clearCart()
-        setPaymentNotice({
-          type: 'success',
-          message: `🎉 Payment successful! ${ref ? `Reference: ${ref}` : ''} Your order has been confirmed and sent to our bakers.`,
+      if (!payment || !ref) return
+
+      void fetch(`/api/paystack/status?reference=${encodeURIComponent(ref)}`, { cache: 'no-store' })
+        .then(async (res) => {
+          const result = await res.json().catch(() => ({}))
+          if (!res.ok || result.payment === 'error') throw new Error('Payment status could not be verified')
+
+          if (result.payment === 'success') {
+            clearCart()
+            setPaymentNotice({
+              type: 'success',
+              message: `🎉 Payment successful! Reference: ${ref} Your order has been confirmed and sent to our bakers.`,
+            })
+          } else if (result.payment === 'failed') {
+            setPaymentNotice({
+              type: 'failed',
+              message: '⚠️ Payment was cancelled or not completed. Please try placing your order again.',
+            })
+          } else {
+            setPaymentNotice({
+              type: 'error',
+              message: 'Payment is still being confirmed. Please refresh this page shortly.',
+            })
+          }
         })
-      } else if (payment === 'failed') {
-        setPaymentNotice({
-          type: 'failed',
-          message: '⚠️ Payment was cancelled or not completed. Please try placing your order again.',
+        .catch(() => {
+          setPaymentNotice({
+            type: 'error',
+            message: '❌ An error occurred while checking payment status.',
+          })
         })
-      } else if (payment === 'error') {
-        setPaymentNotice({
-          type: 'error',
-          message: '❌ An error occurred while checking payment status.',
-        })
-      }
     }
-  }, [])
+  }, [clearCart])
 
   const fetchOrders = useCallback(
     async (queryToUse?: string, modeToUse?: 'all' | 'email' | 'phone', isSilent = false) => {
