@@ -38,17 +38,28 @@ export default function CartPage() {
       console.error('Failed to save customer info locally:', err)
     }
 
-    const payloadItems = cart
-      .filter((item) => item && (item.id || item.name))
-      .map((item) => ({
-        productId: item.id || null,
-        name: item.name,
-        quantity: 1,
-        price: Number(item.price) || 0,
-      }))
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Cart checkout] raw cart items:', cart)
+    }
+
+    const invalidItem = cart.find(
+      (item) => !item || !item.name?.trim() || !Number.isFinite(Number(item.price)) || Number(item.price) < 0
+    )
+
+    if (invalidItem) {
+      alert('One or more cart items are invalid. Please remove them and add the products again.')
+      return
+    }
+
+    const payloadItems = cart.map((item) => ({
+      productId: item.id || null,
+      name: item.name,
+      quantity: 1,
+      price: Number(item.price) || 0,
+    }))
 
     if (payloadItems.length === 0) {
-      alert('Your cart does not contain any valid products.')
+      alert('Your cart is empty. Please add a product before checking out.')
       return
     }
 

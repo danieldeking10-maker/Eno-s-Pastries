@@ -12,6 +12,28 @@ type CartContextType = {
   cartTotal: number;
 };
 
+function normalizeCartItem(value: unknown): Product | null {
+  if (!value || typeof value !== 'object') return null;
+
+  const item = value as Partial<Product>;
+  const name = typeof item.name === 'string' ? item.name.trim() : '';
+  const price = Number(item.price);
+
+  if (!name || !Number.isFinite(price) || price < 0) return null;
+
+  return {
+    id: item.id ? String(item.id) : name,
+    name,
+    description: typeof item.description === 'string' ? item.description : '',
+    price,
+    imageUrl: typeof item.imageUrl === 'string' ? item.imageUrl : undefined,
+    category: typeof item.category === 'string' && item.category ? item.category : 'Pastry',
+    ingredients: Array.isArray(item.ingredients) ? item.ingredients.map(String) : [],
+    available: item.available !== false,
+    bestseller: item.bestseller === true,
+  };
+}
+
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: ReactNode }) {
@@ -35,7 +57,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
         if (savedCart) {
           const parsed = JSON.parse(savedCart);
           if (Array.isArray(parsed)) {
-            setCart(parsed);
+            const normalizedCart = parsed
+              .map(normalizeCartItem)
+              .filter((item): item is Product => item !== null);
+            setCart(normalizedCart);
           }
         }
       }
@@ -58,8 +83,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [cart, isLoaded]);
 
   const addToCart = (product: Product) => {
-    if (!product) return;
-    setCart((prev) => [...prev, product]);
+    const normalizedProduct = normalizeCartItem(product);
+    if (!normalizedProduct) return;
+    setCart((prev) => [...prev, normalizedProduct]);
   };
 
   const removeFromCart = (index: number) => {
