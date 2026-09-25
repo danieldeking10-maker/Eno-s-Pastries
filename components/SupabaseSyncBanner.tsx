@@ -13,6 +13,8 @@ export default function SupabaseSyncBanner() {
     hasServiceRole?: boolean
     isKeyMalformed?: boolean
     canWriteProducts?: boolean
+    cartBucketReady?: boolean
+    cartBucketName?: string
     message: string
   } | null>(null)
   const [loading, setLoading] = useState(true)
@@ -161,6 +163,16 @@ CREATE POLICY "Public can view order items" ON public.order_items FOR SELECT USI
               ) : (
                 <span className="text-[11px] font-bold text-rose-800 bg-rose-100 px-2 py-0.5 rounded-full border border-rose-300 flex items-center gap-1">
                   <AlertCircle className="w-3 h-3 text-rose-700" /> Tables Setup Required
+                </span>
+              )}
+              {status?.hasServiceRole && (
+                <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-full border border-emerald-300 flex items-center gap-1">
+                  <Key className="w-3 h-3 text-emerald-700" /> Service Role Active
+                </span>
+              )}
+              {status?.cartBucketReady && (
+                <span className="text-[11px] font-bold text-blue-800 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200 flex items-center gap-1">
+                  <Database className="w-3 h-3 text-blue-600" /> Cart Bucket ({status.cartBucketName || 'cart-sessions'})
                 </span>
               )}
             </div>
