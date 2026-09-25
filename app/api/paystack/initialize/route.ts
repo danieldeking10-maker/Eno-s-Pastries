@@ -151,18 +151,16 @@ export async function POST(request: Request) {
     const PAYSTACK_SECRET_KEY = rawKey.replace(/['"\r\n\s]/g, '').trim()
     const origin = new URL(request.url).origin
 
-    // If key is missing, process order in demo mode
+    // Payment must never be confirmed without a real Paystack transaction.
     if (!PAYSTACK_SECRET_KEY) {
       await prisma.order.update({
         where: { id: order.id },
-        data: { status: 'CONFIRMED' },
+        data: { status: 'CANCELLED' },
       })
-      return NextResponse.json({
-        authorizationUrl: `${origin}/dashboard?payment=success&demo=true&ref=${reference}`,
-        reference,
-        orderId: order.id,
-        isDemo: true,
-      })
+      return NextResponse.json(
+        { error: 'Payments are temporarily unavailable. Please try again later.' },
+        { status: 503 }
+      )
     }
 
     const amountKobo = ghp(calculatedTotal)
@@ -179,9 +177,7 @@ export async function POST(request: Request) {
       callback_url: `${origin}/api/paystack/callback`,
     }
 
-    if (process.env.PAYSTACK_CURRENCY?.trim()) {
-      body.currency = process.env.PAYSTACK_CURRENCY.trim()
-    }
+    body.currency = (process.env.PAYSTACK_CURRENCY || 'GHS').trim().toUpperCase()
 
     const res = await fetch('https://api.paystack.co/transaction/initialize', {
       method: 'POST',
@@ -198,29 +194,16 @@ export async function POST(request: Request) {
       const paystackErrMsg = data?.message || 'Failed to initialize Paystack transaction'
       const isInvalidKey = paystackErrMsg.toLowerCase().includes('invalid key') || res.status === 401 || res.status === 403
 
-      if (isInvalidKey) {
-        // Automatically place order in demo mode if Paystack secret key is invalid or unauthorized
-        await prisma.order.update({
-          where: { id: order.id },
-          data: { status: 'CONFIRMED' },
-        })
-
-        return NextResponse.json({
-          authorizationUrl: `${origin}/dashboard?payment=success&demo=true&ref=${reference}`,
-          reference,
-          orderId: order.id,
-          isDemo: true,
-        })
-      }
-
       await prisma.order.update({
         where: { id: order.id },
         data: { status: 'CANCELLED' },
       })
 
       return NextResponse.json(
-        { error: paystackErrMsg },
-        { status: 400 }
+        { error: isInvalidKey
+          ? 'Payment configuration is invalid. Please contact support.'
+          : paystackErrMsg },
+        { status: isInvalidKey ? 502 : 400 }
       )
     }
 

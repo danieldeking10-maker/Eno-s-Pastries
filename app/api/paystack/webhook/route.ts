@@ -24,8 +24,6 @@ export async function POST(request: Request) {
 
     // Paystack sends: { event, data: { reference, status, amount, ... } }
     const reference: string | undefined = payload?.data?.reference
-    const paymentStatus: string | undefined = payload?.data?.status
-
     if (!reference) {
       return NextResponse.json({ error: 'Missing reference' }, { status: 400 })
     }
