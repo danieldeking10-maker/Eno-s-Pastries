@@ -9,7 +9,7 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${origin}/dashboard?payment=missing_reference`)
   }
 
-  const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY?.trim()
+  const PAYSTACK_SECRET_KEY = (process.env.PAYSTACK_SECRET_KEY || '').replace(/['"\r\n\s]/g, '')
   if (!PAYSTACK_SECRET_KEY) {
     return NextResponse.redirect(`${origin}/dashboard?payment=error`)
   }
@@ -30,8 +30,8 @@ export async function GET(request: Request) {
       const orderId = verifyData?.data?.metadata?.orderId
 
       if (orderId) {
-        await prisma.order.update({
-          where: { id: orderId },
+        await prisma.order.updateMany({
+          where: { id: orderId, paystackReference: reference },
           data: { status: 'CONFIRMED' },
         })
       } else {

@@ -10,6 +10,7 @@ import { useCart } from '@/components/CartProvider'
 export default function CartPage() {
   const { cart, removeFromCart, clearCart, cartTotal } = useCart()
   const [showCheckout, setShowCheckout] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [checkoutForm, setCheckoutForm] = useState({
     customerName: '',
     customerEmail: '',
@@ -23,6 +24,8 @@ export default function CartPage() {
 
   const handleCheckoutSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (isSubmitting) return
 
     // Save customer info locally for convenient order tracking in user dashboard
     try {
@@ -49,6 +52,8 @@ export default function CartPage() {
       return
     }
 
+    setIsSubmitting(true)
+
     const payload = {
       customerName: checkoutForm.customerName,
       customerEmail: checkoutForm.customerEmail,
@@ -64,11 +69,15 @@ export default function CartPage() {
     }
 
     try {
+      const controller = new AbortController()
+      const timeout = window.setTimeout(() => controller.abort(), 30000)
       const res = await fetch('/api/paystack/initialize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
+        signal: controller.signal,
       })
+      window.clearTimeout(timeout)
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -77,14 +86,16 @@ export default function CartPage() {
 
       const data = await res.json().catch(() => ({}))
       if (data?.authorizationUrl) {
-        clearCart()
         window.location.href = data.authorizationUrl
       } else {
         throw new Error('Payment link was not returned')
       }
     } catch (err: any) {
       console.error(err)
-      alert(err?.message || 'Could not start payment. Please try again.')
+      alert(err?.name === 'AbortError'
+        ? 'Payment setup took too long. Please check your connection and try again.'
+        : err?.message || 'Could not start payment. Please try again.')
+      setIsSubmitting(false)
     }
   }
 
@@ -258,9 +269,10 @@ export default function CartPage() {
                     </button>
                     <button
                       type="submit"
+                      disabled={isSubmitting}
                       className="flex-1 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white py-4 rounded-full font-semibold shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300"
                     >
-                      Place Order 🎉
+                      {isSubmitting ? 'Connecting to Paystack...' : 'Place Order 🎉'}
                     </button>
                   </div>
                 </form>

@@ -2,15 +2,25 @@
 
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
+import crypto from 'crypto'
 
 export async function POST(request: Request) {
   try {
-    const payload = await request.json().catch(() => ({}))
+    const rawBody = await request.text()
+    const signature = request.headers.get('x-paystack-signature') || ''
+    const secret = (process.env.PAYSTACK_SECRET_KEY || '').replace(/[\'"\r\n\s]/g, '')
 
-    const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY
-    if (!PAYSTACK_SECRET_KEY) {
+    if (!secret) {
       return NextResponse.json({ error: 'Missing PAYSTACK_SECRET_KEY' }, { status: 500 })
     }
+
+    const expectedSignature = crypto.createHmac('sha512', secret).update(rawBody).digest('hex')
+    if (!signature || signature.length !== expectedSignature.length ||
+      !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
+      return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 401 })
+    }
+
+    const payload = JSON.parse(rawBody)
 
     // Paystack sends: { event, data: { reference, status, amount, ... } }
     const reference: string | undefined = payload?.data?.reference
@@ -24,7 +34,7 @@ export async function POST(request: Request) {
     const verifyRes = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
       method: 'GET',
       headers: {
-        Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+        Authorization: `Bearer ${secret}`,
         'Content-Type': 'application/json',
       },
     })
@@ -34,7 +44,11 @@ export async function POST(request: Request) {
     const isSuccessful = verifyRes.ok && verifyData?.data?.status === 'success'
 
     if (!isSuccessful) {
-      // Mark cancelled if payment failed; keep idempotent by not erroring
+      if (!verifyRes.ok || !verifyData?.data?.status) {
+        return NextResponse.json({ error: 'Unable to verify transaction' }, { status: 502 })
+      }
+
+      // A verified non-success status is safe to mark as cancelled.
       await prisma.order.updateMany({
         where: { paystackReference: reference },
         data: { status: 'CANCELLED' },

@@ -271,7 +271,7 @@ function playReadyChime() {
 }
 
 export default function UserDashboardPage() {
-  const { addToCart } = useCart()
+  const { addToCart, clearCart } = useCart()
   const [searchMode, setSearchMode] = useState<'all' | 'email' | 'phone'>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [orders, setOrders] = useState<Order[]>([])
@@ -298,6 +298,7 @@ export default function UserDashboardPage() {
       const payment = urlParams.get('payment')
       const ref = urlParams.get('ref')
       if (payment === 'success') {
+        clearCart()
         setPaymentNotice({
           type: 'success',
           message: `🎉 Payment successful! ${ref ? `Reference: ${ref}` : ''} Your order has been confirmed and sent to our bakers.`,

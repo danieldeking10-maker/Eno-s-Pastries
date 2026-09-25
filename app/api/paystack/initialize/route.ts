@@ -69,7 +69,9 @@ export async function POST(request: Request) {
       }
 
       const productId = matched.id
-      const price = Number(item?.price ?? matched.price ?? 0) || Number(matched.price) || 0
+      // Never trust prices sent by the browser. The payment amount must match
+      // the current catalog price used to build the order.
+      const price = Number(matched.price) || 0
 
       // Orders use Prisma relations, so ensure a Supabase-only product exists locally.
       if (!localProducts.some((product) => product.id === productId)) {
@@ -223,6 +225,17 @@ export async function POST(request: Request) {
     }
 
     const authorizationUrl = data?.data?.authorization_url
+    if (typeof authorizationUrl !== 'string' || !authorizationUrl) {
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { status: 'CANCELLED' },
+      })
+      return NextResponse.json(
+        { error: 'Paystack did not return a payment link. Please try again.' },
+        { status: 502 }
+      )
+    }
+
     return NextResponse.json({
       authorizationUrl,
       reference,
