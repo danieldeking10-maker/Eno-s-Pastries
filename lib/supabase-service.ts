@@ -1,9 +1,6 @@
-import { supabase, getSupabaseClient, hasServiceRole } from './supabase'
-import { supabaseAdmin } from './supabase-admin'
+import { getSupabaseClient, hasServiceRole, SUPABASE_CART_BUCKET } from './supabase'
 import prisma from './prisma'
 import crypto from 'crypto'
-
-const databaseClient = supabaseAdmin || supabase
 
 export interface ProductRecord {
   id: string
@@ -185,88 +182,6 @@ function formatPrismaProduct(p: any): ProductRecord {
 }
 
 /**
- * Checks Supabase connection, schema readiness, and RLS/write permissions.
- */
-export async function checkSupabaseStatus() {
-  const client = getSupabaseClient()
-  const isServiceRole = hasServiceRole()
-
-  let productsReady = false
-  let ordersReady = false
-  let orderItemsReady = false
-  let canWriteProducts = isServiceRole
-  let productsError: string | null = null
-  let ordersError: string | null = null
-  let orderItemsError: string | null = null
-
-  try {
-    const prodRes = await withTimeout(client.from('products').select('id').limit(1), 3000)
-    if (!prodRes.error) {
-      productsReady = true
-    } else {
-      productsError = prodRes.error.message
-    }
-
-    const ordRes = await withTimeout(client.from('orders').select('id').limit(1), 3000)
-    if (!ordRes.error) {
-      ordersReady = true
-    } else {
-      ordersError = ordRes.error.message
-    }
-
-    const itemsRes = await withTimeout(client.from('order_items').select('id').limit(1), 3000)
-    if (!itemsRes.error) {
-      orderItemsReady = true
-    } else {
-      orderItemsError = itemsRes.error.message
-    }
-
-    if (isServiceRole) {
-      const writeRes = await withTimeout(
-        client.from('products').insert({
-          id: `ping-${Date.now()}`,
-          name: 'health_check',
-          description: 'health check',
-          price: 0,
-          imageurl: '',
-          category: 'Pastry',
-          ingredients: ['health'],
-          available: true,
-          createdat: new Date().toISOString(),
-          updatedat: new Date().toISOString(),
-        }).select('id').limit(1),
-        4000
-      )
-      canWriteProducts = !writeRes.error
-      if (writeRes.error) {
-        productsError = writeRes.error.message
-      }
-    }
-  } catch (err: any) {
-    return {
-      connected: false,
-      tablesReady: false,
-      message: err?.message || 'Connection error',
-    }
-  }
-
-  return {
-    connected: productsReady || ordersReady || orderItemsReady,
-    tablesReady: productsReady && ordersReady && orderItemsReady,
-    canWriteProducts,
-    productsReady,
-    ordersReady,
-    orderItemsReady,
-    productsError,
-    ordersError,
-    orderItemsError,
-    message: productsReady && ordersReady && orderItemsReady
-      ? 'Supabase connected and tables active'
-      : 'Supabase connection partially available',
-  }
-}
-
-/**
  * Execute a promise with a safety timeout to prevent hanging the server on slow external networks.
  */
 async function withTimeout<T>(promiseLike: PromiseLike<T>, ms = 3500): Promise<T> {
@@ -283,7 +198,7 @@ async function withTimeout<T>(promiseLike: PromiseLike<T>, ms = 3500): Promise<T
 }
 
 /**
- * Checks Supabase connection, schema readiness, and RLS/write permissions.
+ * Checks Supabase connection, schema readiness, RLS/write permissions, and storage buckets.
  */
 export async function checkSupabaseStatus() {
   const client = getSupabaseClient()
@@ -350,6 +265,17 @@ export async function checkSupabaseStatus() {
 
     const tablesReady = productsReady && ordersReady && orderItemsReady
 
+    // 5. Check cart sessions storage bucket
+    let cartBucketReady = false
+    try {
+      const { data: bucketList } = await withTimeout(client.storage.listBuckets(), 3000)
+      if (bucketList?.some((b: any) => b.name === SUPABASE_CART_BUCKET)) {
+        cartBucketReady = true
+      }
+    } catch {
+      cartBucketReady = false
+    }
+
     const rawServiceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || '').trim()
     const isKeyMalformed = !!rawServiceKey && !isServiceRole
 
@@ -375,6 +301,8 @@ export async function checkSupabaseStatus() {
       ordersReady,
       orderItemsReady,
       canWriteProducts,
+      cartBucketReady,
+      cartBucketName: SUPABASE_CART_BUCKET,
       message,
       details: {
         productsError,
@@ -392,6 +320,8 @@ export async function checkSupabaseStatus() {
       ordersReady: false,
       orderItemsReady: false,
       canWriteProducts: false,
+      cartBucketReady: false,
+      cartBucketName: SUPABASE_CART_BUCKET,
       message: err?.message || 'Connection error to Supabase',
     }
   }
@@ -955,3 +885,101 @@ export async function saveOrderToSupabase(orderData: any, orderItems: any[]) {
   }
   return { success: false }
 }
+
+export interface CartSessionData {
+  sessionId: string
+  items: any[]
+  totalCount: number
+  totalAmount: number
+  updatedAt: string
+  metadata?: any
+}
+
+/**
+ * Persists a customer's active cart session into Supabase Storage under SUPABASE_CART_BUCKET
+ */
+export async function saveCartSessionToSupabase(
+  sessionId: string,
+  items: any[],
+  metadata?: any
+): Promise<{ success: boolean; cartSession?: CartSessionData; error?: string }> {
+  try {
+    const client = getSupabaseClient()
+    const fileName = `${sessionId.replace(/[^a-zA-Z0-9_-]/g, '')}.json`
+
+    const totalCount = Array.isArray(items) ? items.length : 0
+    const totalAmount = Array.isArray(items)
+      ? items.reduce((sum, item) => sum + (Number(item?.price) || 0) * (Number(item?.quantity) || 1), 0)
+      : 0
+
+    const cartSession: CartSessionData = {
+      sessionId,
+      items: items || [],
+      totalCount,
+      totalAmount,
+      updatedAt: new Date().toISOString(),
+      metadata,
+    }
+
+    const payloadBlob = new Blob([JSON.stringify(cartSession)], { type: 'application/json' })
+
+    const { error } = await client.storage
+      .from(SUPABASE_CART_BUCKET)
+      .upload(fileName, payloadBlob, {
+        contentType: 'application/json',
+        upsert: true,
+      })
+
+    if (error) {
+      console.warn('Supabase cart session upload notice:', error.message)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, cartSession }
+  } catch (err: any) {
+    console.warn('Supabase cart session save error:', err)
+    return { success: false, error: err?.message || 'Failed to save cart session' }
+  }
+}
+
+/**
+ * Retrieves a customer's active cart session from Supabase Storage under SUPABASE_CART_BUCKET
+ */
+export async function getCartSessionFromSupabase(
+  sessionId: string
+): Promise<{ success: boolean; cartSession?: CartSessionData; error?: string }> {
+  try {
+    const client = getSupabaseClient()
+    const fileName = `${sessionId.replace(/[^a-zA-Z0-9_-]/g, '')}.json`
+
+    const { data, error } = await client.storage.from(SUPABASE_CART_BUCKET).download(fileName)
+
+    if (error || !data) {
+      return { success: false, error: error?.message || 'Session not found' }
+    }
+
+    const text = await data.text()
+    const cartSession = JSON.parse(text) as CartSessionData
+
+    return { success: true, cartSession }
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to get cart session' }
+  }
+}
+
+/**
+ * Removes a customer's cart session from Supabase Storage once converted to order
+ */
+export async function deleteCartSessionFromSupabase(sessionId: string): Promise<boolean> {
+  try {
+    const client = getSupabaseClient()
+    const fileName = `${sessionId.replace(/[^a-zA-Z0-9_-]/g, '')}.json`
+
+    const { error } = await client.storage.from(SUPABASE_CART_BUCKET).remove([fileName])
+
+    return !error
+  } catch {
+    return false
+  }
+}
+
