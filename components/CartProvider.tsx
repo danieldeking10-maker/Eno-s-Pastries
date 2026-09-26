@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { Product } from './ProductCard';
 
 type CartContextType = {
@@ -59,7 +59,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
         if (!response.ok) throw new Error('Cart storage is unavailable');
         const data = await response.json().catch(() => ({}));
         const normalizedCart = Array.isArray(data?.cart)
-          ? data.cart.map(normalizeCartItem).filter((item): item is Product => item !== null)
+          ? data.cart
+              .map((item: unknown) => normalizeCartItem(item))
+              .filter((item: Product | null): item is Product => item !== null)
           : [];
         if (!cancelled) setCart(normalizedCart);
       } catch (err) {
@@ -86,32 +88,36 @@ export function CartProvider({ children }: { children: ReactNode }) {
     });
   }, [cart, isLoaded]);
 
-  const addToCart = (product: Product) => {
+  const addToCart = useCallback((product: Product) => {
     const normalizedProduct = normalizeCartItem(product);
     if (!normalizedProduct) return;
     setCart((prev) => [...prev, normalizedProduct]);
-  };
+  }, []);
 
-  const removeFromCart = (index: number) => {
+  const removeFromCart = useCallback((index: number) => {
     setCart((prev) => {
       const newCart = [...prev];
       newCart.splice(index, 1);
       return newCart;
     });
-  };
+  }, []);
 
   const clearCart = useCallback(() => {
     setCart([]);
   }, []);
 
-  const cartCount = cart.length;
-  const cartTotal = cart.reduce((sum, product) => sum + (Number(product?.price) || 0), 0);
-
-  return (
-    <CartContext.Provider value={{ cart, addToCart, removeFromCart, clearCart, cartCount, cartTotal }}>
-      {children}
-    </CartContext.Provider>
+  const cartCount = useMemo(() => cart.length, [cart]);
+  const cartTotal = useMemo(
+    () => cart.reduce((sum, product) => sum + (Number(product?.price) || 0), 0),
+    [cart],
   );
+
+  const value = useMemo(
+    () => ({ cart, addToCart, removeFromCart, clearCart, cartCount, cartTotal }),
+    [cart, addToCart, removeFromCart, clearCart, cartCount, cartTotal],
+  );
+
+  return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }
 
 export function useCart() {

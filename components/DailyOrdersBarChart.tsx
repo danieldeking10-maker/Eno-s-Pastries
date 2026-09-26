@@ -365,7 +365,7 @@ export default function DailyOrdersBarChart({ orders, loading }: DailyOrdersBarC
                 tickLine={false}
                 axisLine={{ stroke: '#e5e7eb' }}
                 tick={{ fill: '#78716c', fontSize: 11 }}
-                tickFormatter={(val) => (viewMode === 'revenue' ? `₵${val}` : `${val}`)}
+                tickFormatter={(val: number | string) => (viewMode === 'revenue' ? `₵${val}` : `${val}`)}
               />
 
               <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(251, 191, 36, 0.08)' }} />

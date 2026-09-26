@@ -97,7 +97,7 @@ export async function POST(request: Request) {
             imageUrl: matched.imageUrl || '',
             category: matched.category || 'Pastry',
             ingredients: JSON.stringify(matched.ingredients || []),
-            available: matched.available !== false,
+            available: !!matched.available,
           },
           create: {
             id: productId,
@@ -107,7 +107,7 @@ export async function POST(request: Request) {
             imageUrl: matched.imageUrl || '',
             category: matched.category || 'Pastry',
             ingredients: JSON.stringify(matched.ingredients || []),
-            available: matched.available !== false,
+            available: !!matched.available,
           },
         })
       }
