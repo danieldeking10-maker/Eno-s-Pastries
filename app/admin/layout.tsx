@@ -18,9 +18,6 @@ import {
   LayoutDashboard,
 } from 'lucide-react'
 
-const ADMIN_PASSCODE = 'eno123ama'
-const AUTH_STORAGE_KEY = 'enos_admin_session_auth'
-
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [passcode, setPasscode] = useState('')
@@ -28,46 +25,55 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      // Clear legacy permanent localStorage flag so users are prompted
-      localStorage.removeItem('enos_admin_authenticated')
+    let cancelled = false
 
+    async function checkSession() {
       const params = new URLSearchParams(window.location.search)
       if (params.get('lock') === 'true' || params.get('logout') === 'true') {
-        sessionStorage.removeItem(AUTH_STORAGE_KEY)
-        setIsAuthenticated(false)
+        await fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined)
+        if (!cancelled) setIsAuthenticated(false)
         return
       }
 
-      const savedAuth = sessionStorage.getItem(AUTH_STORAGE_KEY)
-      if (savedAuth === 'true') {
-        setIsAuthenticated(true)
-      } else {
-        setIsAuthenticated(false)
+      try {
+        const response = await fetch('/api/auth/session', { cache: 'no-store' })
+        const session = await response.json().catch(() => ({}))
+        if (!cancelled) setIsAuthenticated(response.ok && session?.authenticated === true)
+      } catch {
+        if (!cancelled) setIsAuthenticated(false)
       }
+    }
+
+    void checkSession()
+    return () => {
+      cancelled = true
     }
   }, [])
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
 
-    if (passcode.trim() === ADMIN_PASSCODE) {
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem(AUTH_STORAGE_KEY, 'true')
+    try {
+      const response = await fetch('/api/auth/admin-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ passcode }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        setError(result?.error || 'Admin sign-in failed')
+        return
       }
       setIsAuthenticated(true)
       setPasscode('')
-    } else {
-      setError('Incorrect passcode. Please enter the valid admin passcode.')
+    } catch {
+      setError('Admin sign-in failed. Please try again.')
     }
   }
 
-  const handleLogout = () => {
-    if (typeof window !== 'undefined') {
-      sessionStorage.removeItem(AUTH_STORAGE_KEY)
-      localStorage.removeItem('enos_admin_authenticated')
-    }
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined)
     setIsAuthenticated(false)
     setPasscode('')
     setError(null)

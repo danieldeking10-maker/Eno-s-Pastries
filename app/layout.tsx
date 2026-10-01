@@ -5,6 +5,11 @@ import { CartProvider } from "@/components/CartProvider";
 export const metadata: Metadata = {
   title: "Eno's Pastries",
   description: "Delicious pastries and drinks delivered to your door",
+  icons: {
+    icon: '/favicon.svg',
+    shortcut: '/favicon.ico',
+    apple: '/apple-touch-icon.png',
+  },
 };
 
 export default function RootLayout({

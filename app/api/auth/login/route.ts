@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server'
-import { createSessionCookieValue, verifyPassword } from '@/lib/auth'
+import { createSessionCookieValue, hasAuthSecret, verifyPassword } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 
 export async function POST(request: Request) {
   try {
+    if (!hasAuthSecret()) {
+      return NextResponse.json({ error: 'Authentication is not configured' }, { status: 503 })
+    }
+
     const body = await request.json().catch(() => ({}))
     const email = String(body?.email ?? '').trim().toLowerCase()
     const password = String(body?.password ?? '')
@@ -21,7 +25,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
     }
 
-    const role = user.role || 'ADMIN'
+    const role = user.role || 'CUSTOMER'
 
     const sessionCookie = createSessionCookieValue({ email, role })
     const res = NextResponse.json({ ok: true, role })
@@ -30,6 +34,7 @@ export async function POST(request: Request) {
       sameSite: 'lax',
       path: '/',
       secure: process.env.NODE_ENV === 'production',
+      maxAge: 8 * 60 * 60,
     })
     return res
   } catch (e) {

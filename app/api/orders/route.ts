@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { saveOrderToSupabase, getProducts } from '@/lib/supabase-service';
+import { hasAdminSession } from '@/lib/auth';
 
 export async function GET(request: Request) {
   try {
@@ -8,6 +9,11 @@ export async function GET(request: Request) {
     const email = searchParams.get('email')?.trim()
     const phone = searchParams.get('phone')?.trim()
     const query = searchParams.get('query')?.trim() || searchParams.get('search')?.trim()
+    const isAdmin = await hasAdminSession()
+
+    if (!isAdmin && !email && !phone && !query) {
+      return NextResponse.json({ error: 'Admin authentication required' }, { status: 401 })
+    }
 
     let where: any = undefined
 
@@ -27,14 +33,22 @@ export async function GET(request: Request) {
         customerPhone: { contains: phone },
       }
     } else if (query) {
-      where = {
-        OR: [
-          { customerEmail: { contains: query } },
-          { customerPhone: { contains: query } },
+      const searchFields: Array<{
+        customerEmail?: { contains: string }
+        customerPhone?: { contains: string }
+        customerName?: { contains: string }
+        id?: { contains: string }
+      }> = [
+        { customerEmail: { contains: query } },
+        { customerPhone: { contains: query } },
+      ]
+      if (isAdmin) {
+        searchFields.push(
           { customerName: { contains: query } },
           { id: { contains: query } },
-        ],
+        )
       }
+      where = { OR: searchFields }
     }
 
     const orders = await prisma.order.findMany({

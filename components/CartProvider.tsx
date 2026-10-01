@@ -12,6 +12,8 @@ type CartContextType = {
   cartTotal: number;
 };
 
+const LOCAL_CART_KEY = 'enos_cart_v1';
+
 function normalizeCartItem(value: unknown): Product | null {
   if (!value || typeof value !== 'object') return null;
 
@@ -34,6 +36,19 @@ function normalizeCartItem(value: unknown): Product | null {
   };
 }
 
+function readLocalCart(): Product[] | null {
+  try {
+    const stored = window.localStorage.getItem(LOCAL_CART_KEY);
+    if (stored === null) return null;
+    const parsed: unknown = JSON.parse(stored);
+    return Array.isArray(parsed)
+      ? parsed.map(normalizeCartItem).filter((item): item is Product => item !== null)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: ReactNode }) {
@@ -54,19 +69,21 @@ export function CartProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
 
     async function loadCart() {
+      let remoteCart: Product[] | null = null;
       try {
         const response = await fetch('/api/cart', { cache: 'no-store' });
         if (!response.ok) throw new Error('Cart storage is unavailable');
         const data = await response.json().catch(() => ({}));
-        const normalizedCart = Array.isArray(data?.cart)
+        remoteCart = Array.isArray(data?.cart)
           ? data.cart
-              .map((item: unknown) => normalizeCartItem(item))
+              .map(normalizeCartItem)
               .filter((item: Product | null): item is Product => item !== null)
           : [];
-        if (!cancelled) setCart(normalizedCart);
-      } catch (err) {
-        console.error('Error loading cart from Supabase Storage:', err);
+      } catch {
+        console.warn("Cart storage unavailable; using this browser's saved cart.");
       } finally {
+        const localCart = readLocalCart();
+        if (!cancelled) setCart(localCart ?? remoteCart ?? []);
         if (!cancelled) setIsLoaded(true);
       }
     }
@@ -79,12 +96,19 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!isLoaded) return;
+    try {
+      window.localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(cart));
+    } catch (err) {
+      console.warn('Could not save cart in this browser:', err);
+    }
     void fetch('/api/cart', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cart }),
-    }).catch((err) => {
-      console.error('Error saving cart to Supabase Storage:', err);
+    }).then((response) => {
+      if (!response.ok) throw new Error('Cart storage is unavailable');
+    }).catch(() => {
+      console.warn("Cart storage unavailable; changes are saved in this browser.");
     });
   }, [cart, isLoaded]);
 

@@ -1,23 +1,73 @@
 import crypto from 'crypto'
+import { cookies } from 'next/headers'
 
-const DEFAULT_ADMIN_EMAILS = ['danielankrah1010@gmail.com', 'kobenaahern77@gmail.com', 'danieldeking10@gmail.com']
+const SESSION_COOKIE = 'auth_session'
+const SESSION_DURATION_SECONDS = 8 * 60 * 60
+
+type SessionPayload = {
+  email: string
+  role: string
+  exp: number
+}
+
+function getAuthSecret() {
+  const secret = process.env.AUTH_SECRET || ''
+  return secret.length >= 32 ? secret : null
+}
+
+export function hasAuthSecret() {
+  return getAuthSecret() !== null
+}
 
 export function isAdminEmail(email: string) {
   const normalized = email.trim().toLowerCase()
   const customAdminEmails = process.env.ADMIN_EMAILS
     ? process.env.ADMIN_EMAILS.split(',').map((e) => e.trim().toLowerCase())
     : []
-  
-  if (customAdminEmails.length > 0) {
-    return customAdminEmails.includes(normalized)
-  }
-  
-  return true // Allow admin access for users registered via the admin portal
+  return customAdminEmails.length > 0 && customAdminEmails.includes(normalized)
 }
 
 export function createSessionCookieValue(payload: { email: string; role: string }) {
-  const value = Buffer.from(JSON.stringify(payload)).toString('base64url')
-  return value
+  const secret = getAuthSecret()
+  if (!secret) throw new Error('AUTH_SECRET must contain at least 32 characters')
+
+  const encodedPayload = Buffer.from(JSON.stringify({
+    ...payload,
+    exp: Math.floor(Date.now() / 1000) + SESSION_DURATION_SECONDS,
+  })).toString('base64url')
+  const signature = crypto.createHmac('sha256', secret).update(encodedPayload).digest('hex')
+  return `${encodedPayload}.${signature}`
+}
+
+export function readSessionCookieValue(value: string | undefined): SessionPayload | null {
+  const secret = getAuthSecret()
+  if (!secret || !value) return null
+
+  const separator = value.lastIndexOf('.')
+  if (separator <= 0) return null
+
+  const encodedPayload = value.slice(0, separator)
+  const signature = value.slice(separator + 1)
+  const expected = crypto.createHmac('sha256', secret).update(encodedPayload).digest()
+  const supplied = Buffer.from(signature, 'hex')
+  if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) return null
+
+  try {
+    const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'))
+    if (typeof payload?.email !== 'string' || typeof payload?.role !== 'string' ||
+      !Number.isInteger(payload?.exp) || payload.exp <= Math.floor(Date.now() / 1000)) {
+      return null
+    }
+    return payload as SessionPayload
+  } catch {
+    return null
+  }
+}
+
+export async function hasAdminSession() {
+  const cookieStore = await cookies()
+  const session = readSessionCookieValue(cookieStore.get(SESSION_COOKIE)?.value)
+  return session?.role === 'ADMIN'
 }
 
 export function hashPassword(password: string) {

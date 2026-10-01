@@ -1,12 +1,17 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { recordVerifiedPayment, transactionMatchesOrder, verifyPaystackTransaction } from '@/lib/paystack-payment'
+import { hasAdminSession } from '@/lib/auth'
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    if (!(await hasAdminSession())) {
+      return NextResponse.json({ error: 'Admin authentication required' }, { status: 401 })
+    }
+
     const { id } = await params
     const order = await prisma.order.findUnique({
       where: { id },
@@ -29,6 +34,10 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    if (!(await hasAdminSession())) {
+      return NextResponse.json({ error: 'Admin authentication required' }, { status: 401 })
+    }
+
     const { id } = await params
     const body = await request.json().catch(() => ({}))
 
