@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
+import { recordVerifiedPayment, transactionMatchesOrder, verifyPaystackTransaction } from '@/lib/paystack-payment'
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
@@ -15,42 +16,22 @@ export async function GET(request: Request) {
   }
 
   try {
-    const verifyRes = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      cache: 'no-store',
-    })
-
-    const verifyData = await verifyRes.json().catch(() => ({}))
-
-    const transaction = verifyData?.data
-    const orderId = transaction?.metadata?.orderId
     const order = await prisma.order.findUnique({ where: { paystackReference: reference } })
+    const transaction = await verifyPaystackTransaction(reference)
 
-    if (!verifyRes.ok || !transaction || !order || order.id !== orderId) {
+    if (!transaction || !order || !transactionMatchesOrder(transaction, reference, order)) {
       return NextResponse.redirect(`${origin}/dashboard?payment=error`)
     }
 
-    const expectedAmount = Math.round(Number(order.totalAmount) * 100)
-    const transactionEmail = String(transaction.customer?.email || transaction.email || '').trim().toLowerCase()
-
     if (transaction.status === 'success') {
-      if (transaction.amount !== expectedAmount || transactionEmail !== order.customerEmail.trim().toLowerCase()) {
-        console.error('Paystack callback mismatch for order:', order.id)
+      const recorded = await recordVerifiedPayment(reference, order.id, transaction)
+      if (!recorded) {
         return NextResponse.redirect(`${origin}/dashboard?payment=error`)
       }
-
-      await prisma.order.updateMany({
-        where: { id: order.id, paystackReference: reference, status: 'PENDING' },
-        data: { status: 'CONFIRMED' },
-      })
       return NextResponse.redirect(`${origin}/dashboard?payment=success&ref=${reference}`)
     }
 
-    if (['failed', 'abandoned', 'reversed'].includes(transaction.status)) {
+    if (transaction.status === 'failed' || transaction.status === 'abandoned' || transaction.status === 'reversed') {
       await prisma.order.updateMany({
         where: { id: order.id, paystackReference: reference, status: 'PENDING' },
         data: { status: 'CANCELLED' },

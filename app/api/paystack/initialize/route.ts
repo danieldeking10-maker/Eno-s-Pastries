@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import crypto from 'crypto'
 import { getProducts, saveOrderToSupabase } from '@/lib/supabase-service'
+import { getPaystackCurrency, getPaystackSecretKey } from '@/lib/paystack-payment'
 
 function ghp(amount: number) {
   // Paystack expects amount in minor units (kobo/pesewas)
@@ -165,8 +166,7 @@ export async function POST(request: Request) {
       console.warn('Supabase sync skipped:', e)
     }
 
-    const rawKey = process.env.PAYSTACK_SECRET_KEY || ''
-    const PAYSTACK_SECRET_KEY = rawKey.replace(/['"\r\n\s]/g, '').trim()
+    const PAYSTACK_SECRET_KEY = getPaystackSecretKey()
     const origin = new URL(request.url).origin
 
     // Payment must never be confirmed without a real Paystack transaction.
@@ -195,7 +195,7 @@ export async function POST(request: Request) {
       callback_url: `${origin}/api/paystack/callback`,
     }
 
-    body.currency = (process.env.PAYSTACK_CURRENCY || 'GHS').trim().toUpperCase()
+    body.currency = getPaystackCurrency()
 
     const res = await fetch('https://api.paystack.co/transaction/initialize', {
       method: 'POST',
@@ -204,11 +204,12 @@ export async function POST(request: Request) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15000),
     })
 
     const data = await res.json().catch(() => ({}))
 
-    if (!res.ok || !data?.status) {
+    if (!res.ok || data?.status !== true || data?.data?.reference !== reference) {
       const paystackErrMsg = data?.message || 'Failed to initialize Paystack transaction'
       const isInvalidKey = paystackErrMsg.toLowerCase().includes('invalid key') || res.status === 401 || res.status === 403
 

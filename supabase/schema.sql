@@ -32,9 +32,18 @@ CREATE TABLE IF NOT EXISTS public.orders (
   customerPhone TEXT NOT NULL,
   customerNote TEXT,
   paystackReference TEXT UNIQUE,
+  paystackTransactionId TEXT UNIQUE,
+  paymentChannel TEXT,
+  paymentCurrency TEXT,
+  paidAt TIMESTAMPTZ,
   createdAt TIMESTAMPTZ DEFAULT now(),
   updatedAt TIMESTAMPTZ DEFAULT now()
 );
+
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS paystacktransactionid TEXT UNIQUE;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS paymentchannel TEXT;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS paymentcurrency TEXT;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS paidat TIMESTAMPTZ;
 
 -- 3. Create Order Items Table
 CREATE TABLE IF NOT EXISTS public.order_items (

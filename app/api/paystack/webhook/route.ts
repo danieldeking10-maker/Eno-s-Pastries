@@ -3,12 +3,13 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import crypto from 'crypto'
+import { getPaystackSecretKey, recordVerifiedPayment, transactionMatchesOrder, verifyPaystackTransaction } from '@/lib/paystack-payment'
 
 export async function POST(request: Request) {
   try {
     const rawBody = await request.text()
     const signature = request.headers.get('x-paystack-signature') || ''
-    const secret = (process.env.PAYSTACK_SECRET_KEY || '').replace(/[\'"\r\n\s]/g, '')
+    const secret = getPaystackSecretKey()
 
     if (!secret) {
       return NextResponse.json({ error: 'Missing PAYSTACK_SECRET_KEY' }, { status: 500 })
@@ -29,44 +30,25 @@ export async function POST(request: Request) {
     }
 
     // Optional but safer: verify with Paystack
-    const verifyRes = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${secret}`,
-        'Content-Type': 'application/json',
-      },
-    })
-
-    const verifyData = await verifyRes.json().catch(() => ({}))
-
-    const transaction = verifyData?.data
+    const transaction = await verifyPaystackTransaction(reference)
     const order = await prisma.order.findUnique({ where: { paystackReference: reference } })
 
-    if (!verifyRes.ok || !transaction || !order) {
+    if (!transaction || !order) {
       return NextResponse.json({ error: 'Unable to match transaction to order' }, { status: 422 })
     }
 
-    const orderId = transaction.metadata?.orderId
-    const expectedAmount = Math.round(Number(order.totalAmount) * 100)
-    const transactionEmail = String(transaction.customer?.email || transaction.email || '').trim().toLowerCase()
-
-    if (order.id !== orderId) {
-      return NextResponse.json({ error: 'Transaction metadata does not match order' }, { status: 422 })
+    if (!transactionMatchesOrder(transaction, reference, order)) {
+      return NextResponse.json({ error: 'Transaction details do not match order' }, { status: 422 })
     }
-
     if (transaction.status === 'success') {
-      if (transaction.amount !== expectedAmount || transactionEmail !== order.customerEmail.trim().toLowerCase()) {
-        return NextResponse.json({ error: 'Transaction details do not match order' }, { status: 422 })
+      const recorded = await recordVerifiedPayment(reference, order.id, transaction)
+      if (!recorded) {
+        return NextResponse.json({ error: 'Order is not eligible for payment confirmation' }, { status: 409 })
       }
-
-      await prisma.order.updateMany({
-        where: { id: order.id, paystackReference: reference, status: 'PENDING' },
-        data: { status: 'CONFIRMED' },
-      })
       return NextResponse.json({ ok: true })
     }
 
-    if (['failed', 'abandoned', 'reversed'].includes(transaction.status)) {
+    if (transaction.status === 'failed' || transaction.status === 'abandoned' || transaction.status === 'reversed') {
       await prisma.order.updateMany({
         where: { id: order.id, paystackReference: reference, status: 'PENDING' },
         data: { status: 'CANCELLED' },

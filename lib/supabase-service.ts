@@ -875,3 +875,25 @@ export async function saveOrderToSupabase(orderData: any, orderItems: any[]) {
   }
   return { success: false }
 }
+
+export async function syncOrderPaymentToSupabase(orderId: string, paymentDetails: {
+  paystackTransactionId: string
+  paymentChannel: string | null
+  paymentCurrency: string
+  paidAt: Date
+}) {
+  const client = getSupabaseClient()
+  const { data, error } = await withTimeout(
+    client.from('orders').update({
+      status: 'CONFIRMED',
+      paystacktransactionid: paymentDetails.paystackTransactionId,
+      paymentchannel: paymentDetails.paymentChannel,
+      paymentcurrency: paymentDetails.paymentCurrency,
+      paidat: paymentDetails.paidAt.toISOString(),
+      updatedat: new Date().toISOString(),
+    }).eq('id', orderId).select('id').maybeSingle(),
+    4000
+  )
+  if (error) throw error
+  if (!data) throw new Error(`Supabase order ${orderId} was not found for payment sync`)
+}

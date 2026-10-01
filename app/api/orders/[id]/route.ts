@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
+import { recordVerifiedPayment, transactionMatchesOrder, verifyPaystackTransaction } from '@/lib/paystack-payment'
 
 export async function GET(
   request: Request,
@@ -40,6 +41,32 @@ export async function PUT(
     const validStatuses = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'DELIVERED', 'CANCELLED'] as const
     if (!validStatuses.includes(status)) {
       return NextResponse.json({ error: 'Invalid order status' }, { status: 400 })
+    }
+
+    const order = await prisma.order.findUnique({ where: { id } })
+    if (!order) {
+      return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+    }
+
+    let paymentVerified = Boolean(order.paystackTransactionId && order.paidAt)
+    if (status === 'CONFIRMED' && !paymentVerified) {
+      if (!order.paystackReference) {
+        return NextResponse.json({ error: 'A successful Paystack payment is required before confirmation' }, { status: 409 })
+      }
+
+      const transaction = await verifyPaystackTransaction(order.paystackReference)
+      if (!transaction || transaction.status !== 'success' || !transactionMatchesOrder(transaction, order.paystackReference, order)) {
+        return NextResponse.json({ error: 'A successful Paystack payment is required before confirmation' }, { status: 409 })
+      }
+
+      paymentVerified = await recordVerifiedPayment(order.paystackReference, order.id, transaction)
+      if (!paymentVerified) {
+        return NextResponse.json({ error: 'Payment could not be recorded; order remains unconfirmed' }, { status: 409 })
+      }
+    }
+
+    if (['PREPARING', 'READY', 'DELIVERED'].includes(status) && !paymentVerified) {
+      return NextResponse.json({ error: 'A successful Paystack payment is required before fulfillment' }, { status: 409 })
     }
 
     const updated = await prisma.order.update({

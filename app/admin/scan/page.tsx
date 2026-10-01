@@ -34,6 +34,8 @@ interface Order {
   id: string
   totalAmount: number | string
   status: OrderStatus
+  paystackTransactionId: string | null
+  paidAt: string | null
   orderType: string
   deliveryType: string
   deliveryAddress?: string | null
@@ -193,6 +195,8 @@ function AdminScanContent() {
     }
   }
 
+  const isOrderPaid = Boolean(order?.paystackTransactionId && order.paidAt)
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10">
       {/* Top Admin Nav */}
@@ -309,6 +313,9 @@ function AdminScanContent() {
               >
                 Current Status: {order.status}
               </span>
+              <span className={`text-sm font-semibold ${isOrderPaid ? 'text-green-700' : 'text-amber-700'}`}>
+                Payment: {isOrderPaid ? 'Paid' : 'Unpaid'}
+              </span>
             </div>
 
             {/* Direct Quick Update Buttons */}
@@ -320,7 +327,7 @@ function AdminScanContent() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <button
                   type="button"
-                  disabled={updating || order.status === 'READY'}
+                  disabled={updating || !isOrderPaid || order.status === 'READY'}
                   onClick={() => handleUpdateStatus('READY')}
                   className="py-3.5 px-4 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 text-sm cursor-pointer"
                 >
@@ -330,7 +337,7 @@ function AdminScanContent() {
 
                 <button
                   type="button"
-                  disabled={updating || order.status === 'DELIVERED'}
+                  disabled={updating || !isOrderPaid || order.status === 'DELIVERED'}
                   onClick={() => handleUpdateStatus('DELIVERED')}
                   className="py-3.5 px-4 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 text-sm cursor-pointer"
                 >
@@ -346,7 +353,7 @@ function AdminScanContent() {
                   <button
                     key={st}
                     onClick={() => handleUpdateStatus(st)}
-                    disabled={updating || order.status === st}
+                    disabled={updating || order.status === st || (!isOrderPaid && st !== 'PENDING' && st !== 'CANCELLED')}
                     className="px-2.5 py-1 bg-stone-100 hover:bg-amber-100 text-stone-700 hover:text-amber-900 rounded-md font-medium transition-colors disabled:opacity-40"
                   >
                     {st}

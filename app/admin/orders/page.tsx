@@ -29,6 +29,8 @@ type Order = {
   deliveryDate: string | null
   totalAmount: number
   status: OrderStatus
+  paystackTransactionId: string | null
+  paidAt: string | null
   items: Array<{
     productId: string
     quantity: number
@@ -155,7 +157,9 @@ export default function AdminOrdersPage() {
 
           {!loading && !error && (
             <div className="space-y-6">
-              {orders.map((order) => (
+              {orders.map((order) => {
+                const isPaid = Boolean(order.paystackTransactionId && order.paidAt)
+                return (
                 <div key={order.id} className="bg-white rounded-xl shadow-md p-6">
                   <div className="flex flex-col md:flex-row md:justify-between md:items-start mb-4 gap-4">
                     <div>
@@ -198,6 +202,9 @@ export default function AdminOrdersPage() {
                       </button>
 
                       <div className="flex flex-col items-end gap-2">
+                        <span className={`text-xs font-medium ${isPaid ? 'text-green-700' : 'text-amber-700'}`}>
+                          Payment: {isPaid ? 'Paid' : 'Unpaid'}
+                        </span>
                         <span
                           className={`px-3 py-1 rounded-full text-sm font-medium ${statusColors[order.status] || 'bg-gray-100 text-gray-800'}`}
                         >
@@ -211,7 +218,11 @@ export default function AdminOrdersPage() {
                           className="px-3 py-1 border border-gray-300 rounded-lg text-sm bg-white"
                         >
                           {statusOptions.map((s) => (
-                            <option key={s} value={s}>
+                            <option
+                              key={s}
+                              value={s}
+                              disabled={!isPaid && !['PENDING', 'CANCELLED'].includes(s)}
+                            >
                               {prettyStatus(s)}
                             </option>
                           ))}
@@ -247,7 +258,8 @@ export default function AdminOrdersPage() {
                     </div>
                   </div>
                 </div>
-              ))}
+                )
+              })}
 
               {orders.length === 0 && (
                 <div className="text-center py-12 bg-white rounded-xl shadow-md p-8">
