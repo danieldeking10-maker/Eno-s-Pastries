@@ -1,54 +1,79 @@
-'use server'
-
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
+import { verifyPaystackSignature } from '@/lib/paystack'
 
 export async function POST(request: Request) {
   try {
-    const payload = await request.json().catch(() => ({}))
+    const rawBody = await request.text().catch(() => '')
+    if (!rawBody) {
+      return NextResponse.json({ error: 'Empty payload' }, { status: 400 })
+    }
 
-    const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY
+    const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY?.trim()
     if (!PAYSTACK_SECRET_KEY) {
       return NextResponse.json({ error: 'Missing PAYSTACK_SECRET_KEY' }, { status: 500 })
     }
 
-    // Paystack sends: { event, data: { reference, status, amount, ... } }
+    const signature = request.headers.get('x-paystack-signature')
+    const isSignatureValid = signature
+      ? verifyPaystackSignature(rawBody, signature, PAYSTACK_SECRET_KEY)
+      : false
+
+    let payload: any = {}
+    try {
+      payload = JSON.parse(rawBody)
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+    }
+
+    // Paystack sends: { event, data: { reference, status, id, ... } }
+    const event = payload?.event
     const reference: string | undefined = payload?.data?.reference
-    const paymentStatus: string | undefined = payload?.data?.status
+    const dataStatus: string | undefined = payload?.data?.status
 
     if (!reference) {
       return NextResponse.json({ error: 'Missing reference' }, { status: 400 })
     }
 
-    // Optional but safer: verify with Paystack
-    const verifyRes = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
-        'Content-Type': 'application/json',
-      },
-    })
+    let isSuccessful = false
 
-    const verifyData = await verifyRes.json().catch(() => ({}))
-
-    const isSuccessful = verifyRes.ok && verifyData?.data?.status === 'success'
-
-    if (!isSuccessful) {
-      // Mark cancelled if payment failed; keep idempotent by not erroring
-      await prisma.order.updateMany({
-        where: { paystackReference: reference },
-        data: { status: 'CANCELLED' },
-      })
-
-      return NextResponse.json({ ok: true })
+    if (isSignatureValid && (event === 'charge.success' || dataStatus === 'success')) {
+      isSuccessful = true
+    } else {
+      // Re-verify directly with Paystack API if signature was not provided or for extra security
+      try {
+        const verifyRes = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          cache: 'no-store',
+        })
+        const verifyData = await verifyRes.json().catch(() => ({}))
+        isSuccessful = verifyRes.ok && verifyData?.data?.status === 'success'
+      } catch (err) {
+        console.warn('Direct Paystack verification failed during webhook:', err)
+      }
     }
 
-    await prisma.order.updateMany({
-      where: { paystackReference: reference },
-      data: { status: 'CONFIRMED' },
-    })
+    if (isSuccessful) {
+      await prisma.order.updateMany({
+        where: { paystackReference: reference },
+        data: { status: 'CONFIRMED' },
+      })
+      return NextResponse.json({ ok: true, status: 'CONFIRMED' })
+    }
 
-    return NextResponse.json({ ok: true })
+    // If charge explicitly failed, only cancel orders that are still PENDING
+    if (event === 'charge.failed' || dataStatus === 'failed') {
+      await prisma.order.updateMany({
+        where: { paystackReference: reference, status: 'PENDING' },
+        data: { status: 'CANCELLED' },
+      })
+    }
+
+    return NextResponse.json({ ok: true, handled: true })
   } catch (error) {
     console.error('Paystack webhook error:', error)
     return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 })

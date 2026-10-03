@@ -33,6 +33,7 @@ export async function GET(request: Request) {
           { customerPhone: { contains: query } },
           { customerName: { contains: query } },
           { id: { contains: query } },
+          { paystackReference: { contains: query } },
         ],
       }
     }

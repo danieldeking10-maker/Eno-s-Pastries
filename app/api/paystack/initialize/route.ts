@@ -2,11 +2,7 @@ import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import crypto from 'crypto'
 import { getProducts, saveOrderToSupabase } from '@/lib/supabase-service'
-
-function ghp(amount: number) {
-  // Paystack expects amount in minor units (kobo/pesewas)
-  return Math.round(amount * 100)
-}
+import { getAppOrigin, toMinorUnit } from '@/lib/paystack'
 
 export async function POST(request: Request) {
   try {
@@ -109,6 +105,11 @@ export async function POST(request: Request) {
     }
 
     const calculatedTotal = itemsToCreate.reduce((sum, item) => sum + item.price * item.quantity, 0)
+    if (calculatedTotal <= 0) {
+      return NextResponse.json({ error: 'Order total must be greater than zero' }, { status: 400 })
+    }
+
+    const reference = `order_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`
 
     const order = await prisma.order.create({
       data: {
@@ -122,6 +123,7 @@ export async function POST(request: Request) {
         customerEmail,
         customerPhone: customerPhone || '',
         customerNote: customerNote || null,
+        paystackReference: reference,
         items: {
           create: itemsToCreate,
         },
@@ -136,18 +138,9 @@ export async function POST(request: Request) {
       console.warn('Supabase sync skipped:', e)
     }
 
-    const reference = `order_${order.id}_${crypto.randomBytes(4).toString('hex')}`
-
-    await prisma.order.update({
-      where: { id: order.id },
-      data: {
-        paystackReference: reference,
-      },
-    })
-
     const rawKey = process.env.PAYSTACK_SECRET_KEY || ''
     const PAYSTACK_SECRET_KEY = rawKey.replace(/['"\r\n\s]/g, '').trim()
-    const origin = new URL(request.url).origin
+    const origin = getAppOrigin(request)
 
     // If key is missing, process order in demo mode
     if (!PAYSTACK_SECRET_KEY) {
@@ -163,11 +156,11 @@ export async function POST(request: Request) {
       })
     }
 
-    const amountKobo = ghp(calculatedTotal)
+    const amountPesewas = toMinorUnit(calculatedTotal)
 
     const body: Record<string, any> = {
       email: customerEmail,
-      amount: amountKobo,
+      amount: amountPesewas,
       reference,
       metadata: {
         orderId: order.id,

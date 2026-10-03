@@ -10,6 +10,7 @@ import { useCart } from '@/components/CartProvider'
 export default function CartPage() {
   const { cart, removeFromCart, clearCart, cartTotal } = useCart()
   const [showCheckout, setShowCheckout] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [checkoutForm, setCheckoutForm] = useState({
     customerName: '',
     customerEmail: '',
@@ -23,6 +24,7 @@ export default function CartPage() {
 
   const handleCheckoutSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isSubmitting) return
 
     // Save customer info locally for convenient order tracking in user dashboard
     try {
@@ -35,14 +37,25 @@ export default function CartPage() {
       console.error('Failed to save customer info locally:', err)
     }
 
-    const payloadItems = cart
-      .filter((item) => item && (item.id || item.name))
-      .map((item) => ({
-        productId: item.id || null,
-        name: item.name,
-        quantity: 1,
-        price: Number(item.price) || 0,
-      }))
+    // Group items by product ID/name to prevent duplicate entries
+    const groupedMap = new Map<string, { productId: string | null; name: string; quantity: number; price: number }>()
+    for (const item of cart) {
+      if (!item || (!item.id && !item.name)) continue
+      const key = String(item.id || item.name)
+      const existing = groupedMap.get(key)
+      if (existing) {
+        existing.quantity += 1
+      } else {
+        groupedMap.set(key, {
+          productId: item.id || null,
+          name: item.name,
+          quantity: 1,
+          price: Number(item.price) || 0,
+        })
+      }
+    }
+
+    const payloadItems = Array.from(groupedMap.values())
 
     if (payloadItems.length === 0) {
       alert('Your cart does not contain any valid products.')
@@ -63,6 +76,7 @@ export default function CartPage() {
       items: payloadItems,
     }
 
+    setIsSubmitting(true)
     try {
       const res = await fetch('/api/paystack/initialize', {
         method: 'POST',
@@ -85,6 +99,7 @@ export default function CartPage() {
     } catch (err: any) {
       console.error(err)
       alert(err?.message || 'Could not start payment. Please try again.')
+      setIsSubmitting(false)
     }
   }
 
@@ -251,16 +266,25 @@ export default function CartPage() {
                   <div className="flex gap-6 pt-6">
                     <button
                       type="button"
+                      disabled={isSubmitting}
                       onClick={() => setShowCheckout(false)}
-                      className="flex-1 border-2 border-amber-600 text-amber-700 hover:bg-amber-100 py-4 rounded-full font-semibold transition-all duration-300"
+                      className="flex-1 border-2 border-amber-600 text-amber-700 hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed py-4 rounded-full font-semibold transition-all duration-300"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="flex-1 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white py-4 rounded-full font-semibold shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300"
+                      disabled={isSubmitting}
+                      className="flex-1 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-4 rounded-full font-semibold shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300 flex items-center justify-center gap-2"
                     >
-                      Place Order 🎉
+                      {isSubmitting ? (
+                        <>
+                          <span className="animate-spin inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
+                          <span>Processing Payment...</span>
+                        </>
+                      ) : (
+                        <span>Place Order 🎉</span>
+                      )}
                     </button>
                   </div>
                 </form>
