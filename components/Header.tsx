@@ -41,7 +41,6 @@ export default function Header() {
                 <span className="bg-amber-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">{cartCount}</span>
               )}
             </Link>
-            <Link href="/admin" className="text-stone-700 hover:text-amber-700 font-medium transition-colors duration-300">Admin</Link>
           </nav>
           <Link href="/cart" className="md:hidden bg-gradient-to-r from-amber-600 to-orange-600 text-white px-6 py-2 rounded-full font-medium shadow-lg">Order Now</Link>
         </div>

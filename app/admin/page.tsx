@@ -25,7 +25,7 @@ export default function AdminDashboard() {
 
           <div className="flex items-center gap-3 flex-wrap">
             <Link
-              href="/admin?lock=true"
+              href="/admin-access?lock=true"
               className="px-4 py-3 bg-amber-900/60 hover:bg-amber-900 text-amber-200 hover:text-white rounded-2xl font-bold text-xs shadow-md transition-all flex items-center gap-2 border border-amber-700/60 cursor-pointer"
               title="Lock Admin Station & Show Passcode Gate"
             >

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createAdminSessionCookieValue, getAdminSessionEmail, verifyAdminPasscode } from '@/lib/auth'
+import { createAdminSessionCookieValue, getAdminSessionEmail, hasAdminSessionSecret, verifyAdminPasscode } from '@/lib/auth'
 import { isAdminEmail } from '@/lib/admin-access'
 import { supabase } from '@/lib/supabase'
 
@@ -15,6 +15,10 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (!hasAdminSessionSecret()) {
+    return NextResponse.json({ error: 'Admin session signing secret is not configured.' }, { status: 503 })
+  }
+
   const body = await request.json().catch(() => ({}))
   const accessToken = String(body?.access_token ?? '')
   const passcode = String(body?.passcode ?? '')

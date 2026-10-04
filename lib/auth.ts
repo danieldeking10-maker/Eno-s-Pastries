@@ -9,8 +9,30 @@ function getAdminPasscode() {
   return process.env.ADMIN_PASSCODE || ''
 }
 
+function getAdminSessionSecret() {
+  return process.env.ADMIN_SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || ''
+}
+
 function signAdminSession(payload: string) {
-  return crypto.createHmac('sha256', getAdminPasscode()).update(payload).digest('base64url')
+  const secret = getAdminSessionSecret()
+  if (!secret) throw new Error('ADMIN_SESSION_SECRET must be configured')
+  return crypto.createHmac('sha256', secret).update(payload).digest('base64url')
+}
+
+function getSignedSessionPayload(token: string | undefined) {
+  if (!token || !hasAdminSessionSecret()) return null
+
+  const [payload, signature, extra] = token.split('.')
+  if (!payload || !signature || extra) return null
+
+  const expected = Buffer.from(signAdminSession(payload))
+  const actual = Buffer.from(signature)
+  if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) return null
+  return payload
+}
+
+export function hasAdminSessionSecret() {
+  return !!getAdminSessionSecret()
 }
 
 export function verifyAdminPasscode(candidate: string) {
@@ -27,30 +49,48 @@ export function createAdminSessionCookieValue(email: string) {
   return `${payload}.${signAdminSession(payload)}`
 }
 
-export function getAdminSessionEmail(request: Request) {
-  const token = request.headers.get('cookie')
-    ?.split(';')
-    .map((cookie) => cookie.trim())
-    .find((cookie) => cookie.startsWith('admin_session='))
-    ?.slice('admin_session='.length)
+export function createVerifiedAuthSessionCookieValue(email: string) {
+  const payload = Buffer.from(JSON.stringify({
+    email: email.trim().toLowerCase(),
+    expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+  })).toString('base64url')
+  return `${payload}.${signAdminSession(payload)}`
+}
 
-  if (!token) return null
-
-  const [payload, signature] = token.split('.')
-  if (!payload || !signature) return null
-
-  const expected = Buffer.from(signAdminSession(payload))
-  const actual = Buffer.from(signature)
-  if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) return null
+function getVerifiedSessionEmail(token: string | undefined) {
+  const payload = getSignedSessionPayload(token)
+  if (!payload) return null
 
   try {
     const session = JSON.parse(Buffer.from(payload, 'base64url').toString())
-    return isAdminEmail(session.email) && Number(session.expiresAt) > Date.now()
-      ? String(session.email)
+    return typeof session.email === 'string' && Number(session.expiresAt) > Date.now()
+      ? session.email.trim().toLowerCase()
       : null
   } catch {
     return null
   }
+}
+
+export function getVerifiedAuthEmailFromToken(token: string | undefined) {
+  return getVerifiedSessionEmail(token)
+}
+
+export function getAdminSessionEmailFromToken(token: string | undefined, authToken?: string) {
+  const sessionEmail = getVerifiedSessionEmail(token)
+  const authEmail = getVerifiedAuthEmailFromToken(authToken)
+  return sessionEmail && isAdminEmail(sessionEmail) && sessionEmail === authEmail ? sessionEmail : null
+}
+
+export function getAdminSessionEmail(request: Request) {
+  const cookies = new Map(request.headers.get('cookie')
+    ?.split(';')
+    .map((cookie) => cookie.trim())
+    .map((cookie) => {
+      const separator = cookie.indexOf('=')
+      return [cookie.slice(0, separator), cookie.slice(separator + 1)] as const
+    }))
+
+  return getAdminSessionEmailFromToken(cookies.get('admin_session'), cookies.get('auth_session'))
 }
 
 export function hasAdminSession(request: Request) {

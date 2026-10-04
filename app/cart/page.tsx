@@ -171,58 +171,81 @@ export default function CartPage() {
                 </button>
               ) : (
                 <form onSubmit={handleCheckoutSubmit} className="space-y-6">
-                  <h3 className="text-2xl font-bold text-stone-800 mb-8 text-center">Complete Your Order</h3>
+                  <div className="text-center mb-8">
+                    <h3 className="text-2xl font-bold text-stone-900">Complete your order</h3>
+                    <p className="mt-2 text-base text-stone-700">Add your contact and order details so we can confirm your payment and keep you updated.</p>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="md:col-span-2 border-b-2 border-amber-200 pb-3">
+                      <h4 className="text-lg font-bold text-stone-900">Your contact details</h4>
+                      <p className="mt-1 text-sm text-stone-700">We’ll use these details to confirm your order and contact you if we need anything.</p>
+                    </div>
                     <div>
-                      <label className="block text-sm font-medium text-stone-700 mb-2">Full Name</label>
+                      <label htmlFor="customer-name" className="block text-base font-semibold text-stone-900 mb-2">Full name</label>
                       <input
+                        id="customer-name"
                         type="text"
                         required
                         value={checkoutForm.customerName}
                         onChange={(e) => setCheckoutForm({ ...checkoutForm, customerName: e.target.value })}
-                        className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300"
-                        placeholder="Enter your name"
+                        autoComplete="name"
+                        className="w-full px-5 py-4 text-base text-stone-900 placeholder:text-stone-500 border-2 border-stone-300 rounded-xl focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 focus:outline-none transition-all"
+                        placeholder="Enter the name for this order"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-stone-700 mb-2">Email</label>
+                      <label htmlFor="customer-email" className="block text-base font-semibold text-stone-900 mb-2">Email address</label>
                       <input
+                        id="customer-email"
                         type="email"
                         required
                         value={checkoutForm.customerEmail}
                         onChange={(e) => setCheckoutForm({ ...checkoutForm, customerEmail: e.target.value })}
-                        className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300"
-                        placeholder="your@email.com"
+                        autoComplete="email"
+                        aria-describedby="customer-email-help"
+                        className="w-full px-5 py-4 text-base text-stone-900 placeholder:text-stone-500 border-2 border-stone-300 rounded-xl focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 focus:outline-none transition-all"
+                        placeholder="you@example.com"
                       />
+                      <p id="customer-email-help" className="mt-1.5 text-sm text-stone-700">Your receipt and order updates will be sent here.</p>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-stone-700 mb-2">Phone</label>
+                      <label htmlFor="customer-phone" className="block text-base font-semibold text-stone-900 mb-2">Phone number</label>
                       <input
+                        id="customer-phone"
                         type="tel"
                         required
                         value={checkoutForm.customerPhone}
                         onChange={(e) => setCheckoutForm({ ...checkoutForm, customerPhone: e.target.value })}
-                        className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300"
-                        placeholder="0534716125"
+                        autoComplete="tel"
+                        aria-describedby="customer-phone-help"
+                        className="w-full px-5 py-4 text-base text-stone-900 placeholder:text-stone-500 border-2 border-stone-300 rounded-xl focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 focus:outline-none transition-all"
+                        placeholder="e.g. 024 123 4567"
                       />
+                      <p id="customer-phone-help" className="mt-1.5 text-sm text-stone-700">Use a number we can reach about pickup or delivery.</p>
+                    </div>
+                    <div className="md:col-span-2 border-b-2 border-amber-200 pb-3 pt-2">
+                      <h4 className="text-lg font-bold text-stone-900">Order preferences</h4>
+                      <p className="mt-1 text-sm text-stone-700">Choose how you’d like to receive your order and when you prefer it.</p>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-stone-700 mb-2">Order Type</label>
+                      <label htmlFor="order-type" className="block text-base font-semibold text-stone-900 mb-2">Order type</label>
                       <select
+                        id="order-type"
                         value={checkoutForm.orderType}
                         onChange={(e) => setCheckoutForm({ ...checkoutForm, orderType: e.target.value })}
-                        className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300"
+                        className="w-full px-5 py-4 text-base text-stone-900 border-2 border-stone-300 rounded-xl focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 focus:outline-none transition-all"
                       >
                         <option value="Retail">Retail</option>
                         <option value="Wholesale">Wholesale</option>
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-stone-700 mb-2">Delivery Type</label>
+                      <label htmlFor="delivery-type" className="block text-base font-semibold text-stone-900 mb-2">Pickup or delivery</label>
                       <select
+                        id="delivery-type"
                         value={checkoutForm.deliveryType}
                         onChange={(e) => setCheckoutForm({ ...checkoutForm, deliveryType: e.target.value })}
-                        className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300"
+                        className="w-full px-5 py-4 text-base text-stone-900 border-2 border-stone-300 rounded-xl focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 focus:outline-none transition-all"
                       >
                         <option value="Pickup">Pickup</option>
                         <option value="Delivery">Delivery</option>
@@ -230,36 +253,44 @@ export default function CartPage() {
                     </div>
                     {checkoutForm.deliveryType === 'Delivery' && (
                       <div>
-                        <label className="block text-sm font-medium text-stone-700 mb-2">Delivery Address</label>
+                        <label htmlFor="delivery-address" className="block text-base font-semibold text-stone-900 mb-2">Delivery address</label>
                         <input
+                          id="delivery-address"
                           type="text"
                           required
                           value={checkoutForm.deliveryAddress}
                           onChange={(e) => setCheckoutForm({ ...checkoutForm, deliveryAddress: e.target.value })}
-                          className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300"
-                          placeholder="Enter your address"
+                          autoComplete="street-address"
+                          aria-describedby="delivery-address-help"
+                          className="w-full px-5 py-4 text-base text-stone-900 placeholder:text-stone-500 border-2 border-stone-300 rounded-xl focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 focus:outline-none transition-all"
+                          placeholder="Street, area and nearby landmark"
                         />
+                        <p id="delivery-address-help" className="mt-1.5 text-sm text-stone-700">Include your area and a nearby landmark to help our driver find you.</p>
                       </div>
                     )}
                     <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-stone-700 mb-2">Preferred Date & Time</label>
+                      <label htmlFor="delivery-date" className="block text-base font-semibold text-stone-900 mb-2">Preferred date and time</label>
                       <input
+                        id="delivery-date"
                         type="datetime-local"
                         value={checkoutForm.deliveryDate}
                         onChange={(e) => setCheckoutForm({ ...checkoutForm, deliveryDate: e.target.value })}
-                        className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300"
+                        aria-describedby="delivery-date-help"
+                        className="w-full px-5 py-4 text-base text-stone-900 border-2 border-stone-300 rounded-xl focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 focus:outline-none transition-all"
                       />
+                      <p id="delivery-date-help" className="mt-1.5 text-sm text-stone-700">We’ll confirm availability before preparing your order.</p>
                     </div>
                     <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-stone-700 mb-2">
-                        Customer Note / Special Instructions
+                      <label htmlFor="customer-note" className="block text-base font-semibold text-stone-900 mb-2">
+                        Allergies or special instructions
                       </label>
                       <textarea
+                        id="customer-note"
                         rows={3}
                         value={checkoutForm.customerNote}
                         onChange={(e) => setCheckoutForm({ ...checkoutForm, customerNote: e.target.value })}
-                        className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300 resize-none"
-                        placeholder="Add special instructions (e.g., allergies, delivery preferences, custom messages)"
+                        className="w-full px-5 py-4 text-base text-stone-900 placeholder:text-stone-500 border-2 border-stone-300 rounded-xl focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 focus:outline-none transition-all resize-y"
+                        placeholder="Tell us about allergies, handling needs or delivery instructions"
                       />
                     </div>
                   </div>

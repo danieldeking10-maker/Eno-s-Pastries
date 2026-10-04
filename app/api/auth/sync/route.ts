@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createSessionCookieValue } from '@/lib/auth'
+import { createVerifiedAuthSessionCookieValue } from '@/lib/auth'
 import { isAdminEmail } from '@/lib/admin-access'
 import prisma from '@/lib/prisma'
 import { supabase } from '@/lib/supabase'
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
       console.warn('[Auth Sync] Note: DB upsert skipped or non-fatal:', dbErr)
     }
 
-    const sessionCookie = createSessionCookieValue({ email, role })
+    const sessionCookie = createVerifiedAuthSessionCookieValue(email)
     const res = NextResponse.json({ ok: true, role, email })
     res.cookies.set('auth_session', sessionCookie, {
       httpOnly: true,
