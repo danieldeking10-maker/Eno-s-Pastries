@@ -12,7 +12,7 @@ interface AuthContextType {
   signInWithGoogle: (redirectTo?: string) => Promise<{ error: AuthError | null }>
   signInWithApple: (redirectTo?: string) => Promise<{ error: AuthError | null }>
   signInWithPassword: (email: string, password: string) => Promise<{ data: any; error: AuthError | null }>
-  signUpWithPassword: (email: string, password: string, name?: string) => Promise<{ data: any; error: AuthError | null }>
+  signUpWithPassword: (email: string, password: string, name?: string, redirectTo?: string) => Promise<{ data: any; error: AuthError | null }>
   signOut: () => Promise<void>
 }
 
@@ -34,15 +34,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   // Sync Supabase user to server session cookie and database
-  const syncServerSession = async (currentUser: User | null) => {
-    if (!currentUser?.email) return
+  const syncServerSession = async (currentSession: Session | null) => {
+    if (!currentSession?.user?.email) return
     try {
       await fetch('/api/auth/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: currentUser.email,
-          name: currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || '',
+          access_token: currentSession.access_token,
         }),
       })
     } catch (err) {
@@ -59,7 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(session?.user ?? null)
       setLoading(false)
       if (session?.user) {
-        syncServerSession(session.user)
+        syncServerSession(session)
       }
     })
 
@@ -72,7 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false)
 
       if (event === 'SIGNED_IN' && session?.user) {
-        syncServerSession(session.user)
+        syncServerSession(session)
       } else if (event === 'SIGNED_OUT') {
         try {
           await fetch('/api/auth/logout', { method: 'POST' })
@@ -126,25 +125,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       password,
     })
     if (!error && data.user) {
-      await syncServerSession(data.user)
+      await syncServerSession(data.session)
     }
     return { data, error }
   }
 
-  const signUpWithPassword = async (email: string, password: string, name?: string) => {
+  const signUpWithPassword = async (email: string, password: string, name?: string, redirectTo?: string) => {
     const supabase = getSupabaseBrowserClient()
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
+        emailRedirectTo: getCallbackUrl(redirectTo),
         data: {
           full_name: name || '',
           name: name || '',
         },
       },
     })
-    if (!error && data.user) {
-      await syncServerSession(data.user)
+    if (!error && data.session) {
+      await syncServerSession(data.session)
     }
     return { data, error }
   }

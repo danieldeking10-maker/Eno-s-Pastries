@@ -12,7 +12,7 @@ export function isAdminEmail(email: string) {
     return customAdminEmails.includes(normalized)
   }
   
-  return true // Allow admin access for users registered via the admin portal
+  return DEFAULT_ADMIN_EMAILS.includes(normalized)
 }
 
 export function createSessionCookieValue(payload: { email: string; role: string }) {

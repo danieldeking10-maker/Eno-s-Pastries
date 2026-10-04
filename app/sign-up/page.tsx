@@ -29,22 +29,13 @@ function SignUpContent() {
 
     try {
       // 1. First register in Supabase Auth
-      const { data: supaData, error: supaErr } = await signUpWithPassword(email, password, name)
+      const { data: supaData, error: supaErr } = await signUpWithPassword(email, password, name, redirectTarget)
 
       if (supaErr) {
         setError(supaErr.message)
         setLoading(false)
         return
       }
-
-      // 2. Also register in local database to ensure sync
-      try {
-        await fetch('/api/auth/signup', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, email, password }),
-        })
-      } catch {}
 
       // Check if Supabase requires email confirmation
       if (supaData?.user && !supaData?.session) {
