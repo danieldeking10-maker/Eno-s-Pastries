@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { createSessionCookieValue, isAdminEmail } from '@/lib/auth'
+import { createSessionCookieValue } from '@/lib/auth'
+import { isAdminEmail } from '@/lib/admin-access'
 import prisma from '@/lib/prisma'
 import { supabase } from '@/lib/supabase'
 

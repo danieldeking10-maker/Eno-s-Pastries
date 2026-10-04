@@ -10,7 +10,7 @@ import { useAuth } from '@/components/AuthProvider'
 function SignInContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirectTarget = searchParams.get('redirect') || searchParams.get('next') || '/admin'
+  const redirectTarget = searchParams.get('redirect') || searchParams.get('next') || '/'
 
   const { signInWithPassword } = useAuth()
   const [email, setEmail] = useState('')

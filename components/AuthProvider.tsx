@@ -10,7 +10,6 @@ interface AuthContextType {
   loading: boolean
   isLoggedIn: boolean
   signInWithGoogle: (redirectTo?: string) => Promise<{ error: AuthError | null }>
-  signInWithApple: (redirectTo?: string) => Promise<{ error: AuthError | null }>
   signInWithPassword: (email: string, password: string) => Promise<{ data: any; error: AuthError | null }>
   signUpWithPassword: (email: string, password: string, name?: string, redirectTo?: string) => Promise<{ data: any; error: AuthError | null }>
   signOut: () => Promise<void>
@@ -22,7 +21,6 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   isLoggedIn: false,
   signInWithGoogle: async () => ({ error: null }),
-  signInWithApple: async () => ({ error: null }),
   signInWithPassword: async () => ({ data: null, error: null }),
   signUpWithPassword: async () => ({ data: null, error: null }),
   signOut: async () => {},
@@ -106,18 +104,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error }
   }
 
-  const signInWithApple = async (redirectTo?: string) => {
-    const supabase = getSupabaseBrowserClient()
-    const callback = getCallbackUrl(redirectTo)
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'apple',
-      options: {
-        redirectTo: callback,
-      },
-    })
-    return { error }
-  }
-
   const signInWithPassword = async (email: string, password: string) => {
     const supabase = getSupabaseBrowserClient()
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -167,7 +153,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading,
         isLoggedIn: !!user,
         signInWithGoogle,
-        signInWithApple,
         signInWithPassword,
         signUpWithPassword,
         signOut,

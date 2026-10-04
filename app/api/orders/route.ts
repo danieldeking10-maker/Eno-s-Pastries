@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { saveOrderToSupabase, getProducts } from '@/lib/supabase-service';
+import { hasAdminSession } from '@/lib/auth';
 
 export async function GET(request: Request) {
   try {
@@ -8,6 +9,10 @@ export async function GET(request: Request) {
     const email = searchParams.get('email')?.trim()
     const phone = searchParams.get('phone')?.trim()
     const query = searchParams.get('query')?.trim() || searchParams.get('search')?.trim()
+
+    if (!email && !phone && !hasAdminSession(request)) {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+    }
 
     let where: any = undefined
 

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getProducts, createProduct } from '@/lib/supabase-service';
+import { hasAdminSession } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
 
 export const dynamic = 'force-dynamic';
@@ -50,6 +51,10 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    if (!hasAdminSession(request)) {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+    }
+
     const body: unknown = await request.json().catch(() => null);
     const validationError = validateProductPayload(body);
     if (validationError) {

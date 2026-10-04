@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useAuth } from '@/components/AuthProvider'
+import { isAdminEmail } from '@/lib/admin-access'
 import {
   Lock,
   KeyRound,
@@ -18,66 +20,106 @@ import {
   LayoutDashboard,
 } from 'lucide-react'
 
-const ADMIN_PASSCODE = 'eno123ama'
-const AUTH_STORAGE_KEY = 'enos_admin_session_auth'
-
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [passcode, setPasscode] = useState('')
   const [showPasscode, setShowPasscode] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const { user, session, loading: authLoading } = useAuth()
+  const authorizedEmail = isAdminEmail(user?.email)
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      // Clear legacy permanent localStorage flag so users are prompted
-      localStorage.removeItem('enos_admin_authenticated')
+    if (authLoading) return
+    if (!user?.email || !authorizedEmail) {
+      setIsAuthenticated(false)
+      return
+    }
 
-      const params = new URLSearchParams(window.location.search)
-      if (params.get('lock') === 'true' || params.get('logout') === 'true') {
-        sessionStorage.removeItem(AUTH_STORAGE_KEY)
-        setIsAuthenticated(false)
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('lock') === 'true' || params.get('logout') === 'true') {
+      fetch('/api/auth/logout', { method: 'POST' }).finally(() => setIsAuthenticated(false))
+      window.history.replaceState({}, '', '/admin')
+      return
+    }
+
+    fetch('/api/auth/admin-login', { cache: 'no-store' })
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}))
+        setIsAuthenticated(response.ok && data.email?.toLowerCase() === user.email?.toLowerCase())
+      })
+      .catch(() => setIsAuthenticated(false))
+  }, [authLoading, authorizedEmail, user?.email])
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setSubmitting(true)
+
+    try {
+      const response = await fetch('/api/auth/admin-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          access_token: session?.access_token,
+          passcode: passcode.trim(),
+        }),
+      })
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        setError(data.error || 'Admin access could not be verified.')
         return
       }
 
-      const savedAuth = sessionStorage.getItem(AUTH_STORAGE_KEY)
-      if (savedAuth === 'true') {
-        setIsAuthenticated(true)
-      } else {
-        setIsAuthenticated(false)
-      }
-    }
-  }, [])
-
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
-
-    if (passcode.trim() === ADMIN_PASSCODE) {
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem(AUTH_STORAGE_KEY, 'true')
-      }
       setIsAuthenticated(true)
       setPasscode('')
-    } else {
-      setError('Incorrect passcode. Please enter the valid admin passcode.')
+    } catch {
+      setError('Could not verify admin access. Please try again.')
+    } finally {
+      setSubmitting(false)
     }
   }
 
   const handleLogout = () => {
-    if (typeof window !== 'undefined') {
-      sessionStorage.removeItem(AUTH_STORAGE_KEY)
-      localStorage.removeItem('enos_admin_authenticated')
-    }
+    fetch('/api/auth/logout', { method: 'POST' })
     setIsAuthenticated(false)
     setPasscode('')
     setError(null)
   }
 
-  // Verification state while checking session storage
-  if (isAuthenticated === null) {
+  if (authLoading || (authorizedEmail && isAuthenticated === null)) {
     return (
       <div className="min-h-screen bg-amber-50 flex items-center justify-center p-4">
         <div className="text-center text-stone-600 font-medium">Verifying authorization...</div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-amber-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full rounded-2xl border border-amber-200 bg-white p-8 text-center shadow-xl">
+          <h1 className="text-xl font-bold text-stone-900">Sign in required</h1>
+          <p className="mt-2 text-sm text-stone-600">Sign in with an approved admin account to continue.</p>
+          <Link href="/sign-in?redirect=%2Fadmin" className="mt-5 inline-flex font-bold text-amber-800 hover:underline">
+            Sign in
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  if (!authorizedEmail) {
+    return (
+      <div className="min-h-screen bg-amber-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full rounded-2xl border border-amber-200 bg-white p-8 text-center shadow-xl">
+          <h1 className="text-xl font-bold text-stone-900">Admin access denied</h1>
+          <p className="mt-2 text-sm text-stone-600">This account is not permitted to access the admin panel.</p>
+          <Link href="/" className="mt-5 inline-flex font-bold text-amber-800 hover:underline">
+            Return to the store
+          </Link>
+        </div>
       </div>
     )
   }
@@ -150,12 +192,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </div>
             )}
 
-            <button
+              <button
               type="submit"
+                disabled={submitting}
               className="w-full py-3.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-bold text-sm rounded-xl shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
             >
               <ShieldCheck className="w-4 h-4" />
-              <span>Unlock Admin Access</span>
+                <span>{submitting ? 'Verifying...' : 'Unlock Admin Access'}</span>
             </button>
           </form>
 

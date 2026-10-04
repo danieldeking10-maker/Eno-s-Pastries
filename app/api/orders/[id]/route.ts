@@ -1,11 +1,16 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
+import { hasAdminSession } from '@/lib/auth'
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    if (!hasAdminSession(request)) {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+    }
+
     const { id } = await params
     const order = await prisma.order.findUnique({
       where: { id },
@@ -28,6 +33,10 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    if (!hasAdminSession(request)) {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+    }
+
     const { id } = await params
     const body = await request.json().catch(() => ({}))
 

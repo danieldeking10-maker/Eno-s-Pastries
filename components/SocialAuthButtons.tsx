@@ -16,8 +16,8 @@ export default function SocialAuthButtons({
   onLoadingChange,
   onError,
 }: SocialAuthButtonsProps) {
-  const { signInWithGoogle, signInWithApple } = useAuth()
-  const [activeProvider, setActiveProvider] = useState<'google' | 'apple' | null>(null)
+  const { signInWithGoogle } = useAuth()
+  const [activeProvider, setActiveProvider] = useState<'google' | null>(null)
 
   const handleGoogle = async () => {
     try {
@@ -32,24 +32,6 @@ export default function SocialAuthButtons({
       }
     } catch (err: any) {
       onError?.(err?.message || 'Failed to initiate Google sign in')
-      setActiveProvider(null)
-      onLoadingChange?.(false)
-    }
-  }
-
-  const handleApple = async () => {
-    try {
-      setActiveProvider('apple')
-      onLoadingChange?.(true)
-      onError?.(null)
-      const { error } = await signInWithApple(redirectTo)
-      if (error) {
-        onError?.(error.message || 'Apple sign in failed')
-        setActiveProvider(null)
-        onLoadingChange?.(false)
-      }
-    } catch (err: any) {
-      onError?.(err?.message || 'Failed to initiate Apple sign in')
       setActiveProvider(null)
       onLoadingChange?.(false)
     }
@@ -93,28 +75,6 @@ export default function SocialAuthButtons({
           {activeProvider === 'google'
             ? 'Connecting to Google...'
             : `Continue with Google`}
-        </span>
-      </button>
-
-      {/* Apple Sign In Button */}
-      <button
-        type="button"
-        onClick={handleApple}
-        disabled={activeProvider !== null}
-        className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-stone-900 hover:bg-black text-white font-semibold text-sm rounded-xl shadow-xs hover:shadow-md transition-all duration-200 disabled:opacity-60 cursor-pointer"
-        title={`${actionText} with Apple`}
-      >
-        {activeProvider === 'apple' ? (
-          <div className="w-5 h-5 border-2 border-stone-600 border-t-white rounded-full animate-spin" />
-        ) : (
-          <svg className="w-5 h-5 shrink-0 fill-current text-white" viewBox="0 0 170 170">
-            <path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.75 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.35.13-9.16-1.9-14.42-6.08-3.7-3.04-7.7-7.76-12-14.16-5.46-8.15-9.74-17.5-12.85-28.06-3.1-10.55-4.66-20.73-4.66-30.54 0-14.45 3.54-26.65 10.63-36.6 7.09-9.95 16.32-15.02 27.69-15.22 4.8 0 10.37 1.34 16.71 4.02 6.34 2.68 10.32 4.07 11.95 4.17 1.63-.1 5.86-1.57 12.69-4.42 6.83-2.85 12.23-4.14 16.21-3.87 12.24.87 21.84 5.38 28.79 13.54-10.88 6.53-16.19 15.77-15.93 27.72.26 9.47 3.86 17.5 10.8 24.1 6.94 6.6 15.22 10.22 24.84 10.85-2.28 6.86-5.27 14.07-8.97 21.63zM119.22 33.39c0-6.73 2.45-13.14 7.35-19.24 4.9-6.09 11.02-10.34 18.36-12.74.33 2.17.49 4.13.49 5.87 0 6.63-2.6 13.15-7.8 19.57-5.2 6.41-11.3 10.43-18.3 12.06-.06-1.85-.1-3.69-.1-5.52z" />
-          </svg>
-        )}
-        <span>
-          {activeProvider === 'apple'
-            ? 'Connecting to Apple...'
-            : `Continue with Apple`}
         </span>
       </button>
 
