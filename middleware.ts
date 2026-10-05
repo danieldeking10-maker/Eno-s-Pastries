@@ -49,6 +49,19 @@ async function hasValidAdminSession(adminToken: string | undefined, authToken: s
 }
 
 export async function middleware(request: NextRequest) {
+  if (
+    request.nextUrl.pathname === '/' &&
+    (request.nextUrl.searchParams.has('error') || request.nextUrl.searchParams.has('error_code'))
+  ) {
+    const signInUrl = request.nextUrl.clone()
+    signInUrl.pathname = '/sign-in'
+    signInUrl.search = ''
+    signInUrl.searchParams.set('oauth_error', 'retry')
+    return NextResponse.redirect(signInUrl)
+  }
+
+  if (!request.nextUrl.pathname.startsWith('/admin')) return NextResponse.next()
+
   const adminToken = request.cookies.get('admin_session')?.value
   const authToken = request.cookies.get('auth_session')?.value
   if (await hasValidAdminSession(adminToken, authToken)) return NextResponse.next()
@@ -60,5 +73,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/admin', '/admin/:path*'],
+  matcher: ['/', '/admin', '/admin/:path*'],
 }

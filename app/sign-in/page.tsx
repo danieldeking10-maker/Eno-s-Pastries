@@ -16,7 +16,11 @@ function SignInContent() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(() => (
+    searchParams.get('oauth_error') === 'retry'
+      ? 'Google sign-in expired or was already used. Please try again.'
+      : null
+  ))
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
