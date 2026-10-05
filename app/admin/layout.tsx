@@ -79,7 +79,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     router.replace('/admin-access')
   }
 
-  // Verification state while checking session storage
   if (isAuthenticated === null) {
     return (
       <div className="min-h-screen bg-amber-50 flex items-center justify-center p-4">
@@ -88,15 +87,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     )
   }
 
-  // Passcode login gate
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100 flex items-center justify-center p-4 sm:p-6">
         <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl border border-amber-200/80 p-6 sm:p-8 relative overflow-hidden animate-fade-in">
-          {/* Top Decorative Banner */}
           <div className="absolute top-0 left-0 right-0 h-3 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-700" />
 
-          {/* Back to main site link */}
           <div className="mb-6 flex justify-between items-center">
             <Link
               href="/"
@@ -132,6 +128,93 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   id="admin-passcode"
                   type={showPasscode ? 'text' : 'password'}
                   value={passcode}
+                  onChange={(event) => setPasscode(event.target.value)}
+                  autoComplete="current-password"
+                  required
+                  className="w-full p-3 border-2 border-amber-200 rounded-xl focus:border-amber-600 focus:outline-none text-sm text-stone-900"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPasscode((value) => !value)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-500 hover:text-stone-700"
+                  aria-label={showPasscode ? 'Hide passcode' : 'Show passcode'}
+                >
+                  {showPasscode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {error && (
+              <div role="alert" className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 px-4 py-3 font-semibold text-white shadow-lg hover:from-amber-700 hover:to-orange-700"
+            >
+              <ShieldCheck className="h-4 w-4" /> Unlock admin access
+            </button>
+          </form>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-stone-50">
+      <header className="border-b border-stone-200 bg-white/90 backdrop-blur-sm sticky top-0 z-40">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-amber-700">Admin</p>
+            <h1 className="text-xl font-bold text-stone-900">Eno&apos;s Pastries Control Panel</h1>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="inline-flex items-center gap-2 rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
+          >
+            <LogOut className="h-4 w-4" /> Log out
+          </button>
+        </div>
+      </header>
+
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <nav className="mb-6 grid gap-3 rounded-2xl border border-stone-200 bg-white p-3 sm:grid-cols-5">
+          <Link href="/admin" className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-stone-700 hover:bg-amber-50 hover:text-amber-800">
+            <LayoutDashboard className="h-4 w-4" /> Dashboard
+          </Link>
+          <Link href="/admin/orders" className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-stone-700 hover:bg-amber-50 hover:text-amber-800">
+            <ShoppingBag className="h-4 w-4" /> Orders
+          </Link>
+          <Link href="/admin/products" className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-stone-700 hover:bg-amber-50 hover:text-amber-800">
+            <Package className="h-4 w-4" /> Products
+          </Link>
+          <Link href="/admin/analytics" className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-stone-700 hover:bg-amber-50 hover:text-amber-800">
+            <BarChart2 className="h-4 w-4" /> Analytics
+          </Link>
+          <Link href="/admin/scan" className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-stone-700 hover:bg-amber-50 hover:text-amber-800">
+            <QrCode className="h-4 w-4" /> Scan
+          </Link>
+        </nav>
+
+        {children}
+      </div>
+    </div>
+  )
+}
+
+              >
+                <KeyRound className="w-3.5 h-3.5 text-amber-600" /> Admin Passcode
+              </label>
+              <div className="relative">
+                <input
+                  id="admin-passcode"
+                  type={showPasscode ? 'text' : 'password'}
+                  value={passcode}
                   onChange={(e) => setPasscode(e.target.value)}
                   placeholder="Enter admin passcode..."
                   required
@@ -156,12 +239,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </div>
             )}
 
-            <button
+              <button
               type="submit"
+                disabled={submitting}
               className="w-full py-3.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-bold text-sm rounded-xl shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
             >
               <ShieldCheck className="w-4 h-4" />
-              <span>Unlock Admin Access</span>
+                <span>{submitting ? 'Verifying...' : 'Unlock Admin Access'}</span>
             </button>
           </form>
 

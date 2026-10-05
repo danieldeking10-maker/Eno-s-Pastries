@@ -46,6 +46,7 @@ export async function GET(request: Request) {
         searchFields.push(
           { customerName: { contains: query } },
           { id: { contains: query } },
+          { paystackReference: { contains: query } },
         )
       }
       where = { OR: searchFields }
@@ -73,14 +74,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Order must include at least one item' }, { status: 400 });
     }
 
-    // Resolve product IDs to ensure foreign key integrity
     const itemsToCreate = [];
     let allProducts = await prisma.product.findMany();
     if (allProducts.length === 0) {
       await getProducts();
       allProducts = await prisma.product.findMany();
     }
-    
+
     for (const item of rawItems) {
       let pid = item.productId || item.id;
       let matched = allProducts.find(p => p.id === pid);
@@ -112,7 +112,6 @@ export async function POST(request: Request) {
     const order = await prisma.order.create({
       data: {
         totalAmount,
-        // Public callers cannot mark an order as paid or fulfilled.
         status: 'PENDING',
         orderType: body.orderType ?? 'RETAIL',
         deliveryType: body.deliveryType ?? 'PICKUP',
@@ -129,7 +128,6 @@ export async function POST(request: Request) {
       include: { items: { include: { product: true } } },
     });
 
-    // Mirror to Supabase if available
     try {
       await saveOrderToSupabase(order, itemsToCreate);
     } catch (e) {

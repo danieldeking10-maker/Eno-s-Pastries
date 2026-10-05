@@ -3,15 +3,24 @@ import prisma from '@/lib/prisma'
 import { recordVerifiedPayment, transactionMatchesOrder, verifyPaystackTransaction } from '@/lib/paystack-payment'
 
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url)
+  const origin = new URL(request.url).origin
+  const { searchParams } = new URL(request.url)
   const reference = searchParams.get('reference') || searchParams.get('trxref')
 
   if (!reference) {
     return NextResponse.redirect(`${origin}/dashboard?payment=missing_reference`)
   }
 
-  const PAYSTACK_SECRET_KEY = (process.env.PAYSTACK_SECRET_KEY || '').replace(/['"\r\n\s]/g, '')
+  const PAYSTACK_SECRET_KEY = (process.env.PAYSTACK_SECRET_KEY || '').replace(/["'\r\n\s]/g, '')
   if (!PAYSTACK_SECRET_KEY) {
+    const existingOrder = await prisma.order.findFirst({
+      where: { paystackReference: reference },
+    })
+
+    if (existingOrder?.status === 'CONFIRMED') {
+      return NextResponse.redirect(`${origin}/dashboard?payment=success&ref=${reference}`)
+    }
+
     return NextResponse.redirect(`${origin}/dashboard?payment=error`)
   }
 

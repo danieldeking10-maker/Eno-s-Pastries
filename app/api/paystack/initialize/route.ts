@@ -5,7 +5,6 @@ import { getProducts, saveOrderToSupabase } from '@/lib/supabase-service'
 import { getPaystackCurrency, getPaystackSecretKey } from '@/lib/paystack-payment'
 
 function ghp(amount: number) {
-  // Paystack expects amount in minor units (kobo/pesewas)
   return Math.round(amount * 100)
 }
 
@@ -37,10 +36,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Cart is empty' }, { status: 400 })
     }
 
-    // Resolve products from the same Supabase-backed source used by the storefront.
     const itemsToCreate = []
     const localProducts = await prisma.product.findMany()
-    // Do not validate checkout against a stale 15-second product cache.
     const remoteProducts = await getProducts(true)
 
     for (const item of items) {
@@ -83,11 +80,8 @@ export async function POST(request: Request) {
       }
 
       const productId = matched.id
-      // Never trust prices sent by the browser. The payment amount must match
-      // the current catalog price used to build the order.
       const price = Number(matched.price) || 0
 
-      // Orders use Prisma relations, so ensure a Supabase-only product exists locally.
       if (!localProducts.some((product) => product.id === productId)) {
         await prisma.product.upsert({
           where: { id: productId },
@@ -125,8 +119,7 @@ export async function POST(request: Request) {
     }
 
     const calculatedTotal = itemsToCreate.reduce((sum, item) => sum + item.price * item.quantity, 0)
-
-    if (!Number.isFinite(calculatedTotal) || calculatedTotal <= 0) {
+    if (calculatedTotal <= 0) {
       return NextResponse.json({ error: 'Order total must be greater than zero' }, { status: 400 })
     }
 
@@ -142,6 +135,7 @@ export async function POST(request: Request) {
         customerEmail,
         customerPhone: customerPhone || '',
         customerNote: customerNote || null,
+        paystackReference: `order_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
         items: {
           create: itemsToCreate,
         },
@@ -150,16 +144,12 @@ export async function POST(request: Request) {
     })
 
     const reference = `order_${order.id}_${crypto.randomBytes(4).toString('hex')}`
-
     const orderWithReference = await prisma.order.update({
       where: { id: order.id },
-      data: {
-        paystackReference: reference,
-      },
+      data: { paystackReference: reference },
       include: { items: true },
     })
 
-    // Mirror only after the Paystack reference has been assigned.
     try {
       await saveOrderToSupabase(orderWithReference, itemsToCreate)
     } catch (e) {
@@ -169,7 +159,6 @@ export async function POST(request: Request) {
     const PAYSTACK_SECRET_KEY = getPaystackSecretKey()
     const origin = new URL(request.url).origin
 
-    // Payment must never be confirmed without a real Paystack transaction.
     if (!PAYSTACK_SECRET_KEY) {
       await prisma.order.update({
         where: { id: order.id },
@@ -181,11 +170,11 @@ export async function POST(request: Request) {
       )
     }
 
-    const amountKobo = ghp(calculatedTotal)
+    const amountPesewas = ghp(calculatedTotal)
 
     const body: Record<string, any> = {
       email: customerEmail,
-      amount: amountKobo,
+      amount: amountPesewas,
       reference,
       metadata: {
         orderId: order.id,
@@ -219,9 +208,7 @@ export async function POST(request: Request) {
       })
 
       return NextResponse.json(
-        { error: isInvalidKey
-          ? 'Payment configuration is invalid. Please contact support.'
-          : paystackErrMsg },
+        { error: isInvalidKey ? 'Payment configuration is invalid. Please contact support.' : paystackErrMsg },
         { status: isInvalidKey ? 502 : 400 }
       )
     }
@@ -236,6 +223,18 @@ export async function POST(request: Request) {
         { error: 'Paystack did not return a payment link. Please try again.' },
         { status: 502 }
       )
+    }
+
+    return NextResponse.json({
+      authorizationUrl,
+      reference,
+      orderId: order.id,
+    })
+  } catch (error) {
+    console.error('Paystack initialize failed:', error)
+    return NextResponse.json({ error: 'Failed to initialize payment' }, { status: 500 })
+  }
+}
     }
 
     return NextResponse.json({

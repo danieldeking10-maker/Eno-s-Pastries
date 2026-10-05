@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getProductById, updateProduct, deleteProduct } from '@/lib/supabase-service';
-import { revalidatePath } from 'next/cache';
 import { hasAdminSession } from '@/lib/auth';
+import { revalidatePath } from 'next/cache';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -19,13 +19,17 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    if (!(await hasAdminSession())) {
+      return NextResponse.json({ error: 'Admin authentication required' }, { status: 401 })
+    }
+
     const { id } = await params;
     const product = await getProductById(id);
-    
+
     if (!product) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 });
     }
-    
+
     return NextResponse.json(product, {
       headers: NO_CACHE_HEADERS,
     });
@@ -61,7 +65,6 @@ export async function PUT(
       }
     }
 
-    // Verify product existence first
     const existing = await getProductById(id);
     if (!existing) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 });
@@ -100,8 +103,7 @@ export async function DELETE(
     }
 
     const { id } = await params;
-    
-    // Check if product exists in either database
+
     const existing = await getProductById(id);
     if (!existing) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 });

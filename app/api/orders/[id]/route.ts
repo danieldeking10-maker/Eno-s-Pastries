@@ -46,7 +46,6 @@ export async function PUT(
       return NextResponse.json({ error: 'Missing status' }, { status: 400 })
     }
 
-    // Prisma enum values are: PENDING, CONFIRMED, PREPARING, READY, DELIVERED, CANCELLED
     const validStatuses = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'DELIVERED', 'CANCELLED'] as const
     if (!validStatuses.includes(status)) {
       return NextResponse.json({ error: 'Invalid order status' }, { status: 400 })
@@ -90,5 +89,4 @@ export async function PUT(
     return NextResponse.json({ error: 'Failed to update order' }, { status: 500 })
   }
 }
-
 

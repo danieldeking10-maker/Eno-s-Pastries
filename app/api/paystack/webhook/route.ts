@@ -1,5 +1,3 @@
-'use server'
-
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import crypto from 'crypto'
@@ -22,14 +20,12 @@ export async function POST(request: Request) {
     }
 
     const payload = JSON.parse(rawBody)
-
-    // Paystack sends: { event, data: { reference, status, amount, ... } }
     const reference: string | undefined = payload?.data?.reference
+
     if (!reference) {
       return NextResponse.json({ error: 'Missing reference' }, { status: 400 })
     }
 
-    // Optional but safer: verify with Paystack
     const transaction = await verifyPaystackTransaction(reference)
     const order = await prisma.order.findUnique({ where: { paystackReference: reference } })
 
@@ -55,7 +51,7 @@ export async function POST(request: Request) {
       })
     }
 
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true, handled: true })
   } catch (error) {
     console.error('Paystack webhook error:', error)
     return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 })

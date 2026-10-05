@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getProducts, createProduct } from '@/lib/supabase-service';
-import { revalidatePath } from 'next/cache';
 import { hasAdminSession } from '@/lib/auth';
+import { revalidatePath } from 'next/cache';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
     }
 
     const product = body as Record<string, unknown>;
-    
+
     if (typeof product.name !== 'string' || !product.name.trim()) {
       return NextResponse.json({ error: 'Product name is required' }, { status: 400 });
     }

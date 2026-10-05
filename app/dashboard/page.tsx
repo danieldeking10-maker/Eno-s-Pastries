@@ -416,13 +416,15 @@ export default function UserDashboardPage() {
     [searchQuery, searchMode]
   )
 
-  // Load saved customer info from localStorage on mount
+  // Load saved customer info from localStorage on mount (or URL ref query)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const savedEmail = localStorage.getItem('enos_customer_email') || ''
       const savedPhone = localStorage.getItem('enos_customer_phone') || ''
+      const urlParams = new URLSearchParams(window.location.search)
+      const ref = urlParams.get('ref') || ''
 
-      const initialValue = savedEmail || savedPhone
+      const initialValue = savedEmail || savedPhone || ref
       if (initialValue) {
         setSearchQuery(initialValue)
         const initialMode = savedEmail ? 'email' : savedPhone ? 'phone' : 'all'

@@ -1,294 +1,60 @@
 'use client'
 
-import { useState } from 'react'
-import Image from 'next/image'
 import Link from 'next/link'
 import Header from '@/components/Header'
 import { useCart } from '@/components/CartProvider'
 
 export default function CartPage() {
   const { cart, removeFromCart, cartTotal } = useCart()
-  const [showCheckout, setShowCheckout] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [checkoutForm, setCheckoutForm] = useState({
-    customerName: '',
-    customerEmail: '',
-    customerPhone: '',
-    orderType: 'Retail',
-    deliveryType: 'Pickup',
-    deliveryAddress: '',
-    deliveryDate: '',
-    customerNote: ''
-  })
-
-  const handleCheckoutSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (isSubmitting) return
-
-    // Save customer info locally for convenient order tracking in user dashboard
-    try {
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('enos_customer_email', checkoutForm.customerEmail)
-        localStorage.setItem('enos_customer_phone', checkoutForm.customerPhone)
-        localStorage.setItem('enos_customer_name', checkoutForm.customerName)
-      }
-    } catch (err) {
-      console.error('Failed to save customer info locally:', err)
-    }
-
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[Cart checkout] raw cart items:', cart)
-    }
-
-    const invalidItem = cart.find(
-      (item) => !item || !item.name?.trim() || !Number.isFinite(Number(item.price)) || Number(item.price) < 0
-    )
-
-    if (invalidItem) {
-      alert('One or more cart items are invalid. Please remove them and add the products again.')
-      return
-    }
-
-    const payloadItems = cart.map((item) => ({
-      productId: item.id || null,
-      name: item.name,
-      quantity: 1,
-      price: Number(item.price) || 0,
-    }))
-
-    if (payloadItems.length === 0) {
-      alert('Your cart is empty. Please add a product before checking out.')
-      return
-    }
-
-    setIsSubmitting(true)
-
-    const payload = {
-      customerName: checkoutForm.customerName,
-      customerEmail: checkoutForm.customerEmail,
-      customerPhone: checkoutForm.customerPhone,
-      orderType: checkoutForm.orderType === 'Wholesale' ? 'WHOLESALE' : 'RETAIL',
-      deliveryType: checkoutForm.deliveryType === 'Delivery' ? 'DELIVERY' : 'PICKUP',
-      deliveryAddress: checkoutForm.deliveryType === 'Delivery' ? checkoutForm.deliveryAddress : null,
-      deliveryDate: checkoutForm.deliveryDate ? checkoutForm.deliveryDate : null,
-      customerNote: checkoutForm.customerNote ? checkoutForm.customerNote : null,
-      status: 'PENDING',
-      totalAmount: cartTotal,
-      items: payloadItems,
-    }
-
-    try {
-      const controller = new AbortController()
-      const timeout = window.setTimeout(() => controller.abort(), 30000)
-      const res = await fetch('/api/paystack/initialize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      })
-      window.clearTimeout(timeout)
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err?.error || 'Failed to initialize payment')
-      }
-
-      const data = await res.json().catch(() => ({}))
-      if (data?.authorizationUrl) {
-        window.location.href = data.authorizationUrl
-      } else {
-        throw new Error('Payment link was not returned')
-      }
-    } catch (err: any) {
-      console.error(err)
-      alert(err?.name === 'AbortError'
-        ? 'Payment setup took too long. Please check your connection and try again.'
-        : err?.message || 'Could not start payment. Please try again.')
-      setIsSubmitting(false)
-    }
-  }
-
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-amber-50 to-white">
       <Header />
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-32 pb-24">
-        <div className="text-center mb-16">
-          <p className="text-amber-700 text-lg font-medium mb-4 tracking-widest uppercase animate-fade-in-up" style={{ animationDelay: '0.2s' }}>Order Now</p>
-          <h1 className="text-4xl md:text-5xl font-bold text-stone-800 mb-6 animate-fade-in-up" style={{ animationDelay: '0.4s' }}>Your Cart</h1>
+      <main className="mx-auto max-w-4xl px-4 pb-24 pt-28 sm:px-6 lg:px-8">
+        <div className="mb-10 text-center">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.25em] text-amber-700">Cart</p>
+          <h1 className="text-3xl font-black text-stone-900 sm:text-4xl">Your order summary</h1>
         </div>
 
         {cart.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-2xl shadow-lg">
-            <div className="text-6xl mb-6">🛒</div>
-            <h3 className="text-2xl font-semibold text-stone-800 mb-4">Your Cart is Empty</h3>
-            <p className="text-lg text-stone-600 mb-8">Add some delicious pastries to get started!</p>
-            <Link href="/products" className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white px-8 py-3 rounded-full font-semibold shadow-lg hover:shadow-xl transition-all duration-300">
-              Browse Products
+          <div className="rounded-3xl border border-stone-200 bg-white p-10 text-center shadow-sm">
+            <div className="mb-4 text-5xl">🛒</div>
+            <h2 className="text-2xl font-bold text-stone-900">Your cart is empty</h2>
+            <p className="mt-2 text-stone-600">Add a few pastries before checkout.</p>
+            <Link href="/products" className="mt-6 inline-flex rounded-full bg-amber-600 px-6 py-3 font-semibold text-white transition hover:bg-amber-700">
+              Browse products
             </Link>
           </div>
         ) : (
-          <>
-            <div className="space-y-6 mb-12">
+          <div className="space-y-6">
+            <div className="space-y-4 rounded-3xl border border-stone-200 bg-white p-4 shadow-sm sm:p-6">
               {cart.map((item, index) => (
-                <div key={index} className="glassmorphism rounded-2xl p-6 shadow-lg flex items-center gap-6 animate-fade-in-up" style={{ animationDelay: `${index * 0.1}s` }}>
-                  {item.imageUrl && (
-                    <div className="relative w-24 h-24 shrink-0 overflow-hidden rounded-xl bg-stone-100">
-                      <Image
-                        src={item.imageUrl}
-                        alt={item.name}
-                        fill
-                        sizes="96px"
-                        className="object-cover"
-                        referrerPolicy="no-referrer"
-                        unoptimized={item.imageUrl.startsWith('data:')}
-                      />
-                    </div>
-                  )}
-                  <div className="flex-1">
-                    <h4 className="text-xl font-semibold text-stone-800 mb-1">{item.name}</h4>
-                    <p className="text-amber-700 font-bold text-lg">GH₵{item.price.toFixed(2)}</p>
+                <div key={`${item.id ?? item.name}-${index}`} className="flex items-center justify-between gap-4 rounded-2xl border border-stone-200 p-4">
+                  <div>
+                    <h3 className="font-semibold text-stone-900">{item.name}</h3>
+                    <p className="text-sm text-stone-600">GH₵{Number(item.price || 0).toFixed(2)}</p>
                   </div>
                   <button
+                    type="button"
                     onClick={() => removeFromCart(index)}
-                    className="w-12 h-12 bg-red-100 hover:bg-red-200 text-red-600 rounded-full flex items-center justify-center transition-all duration-300 hover:scale-110"
+                    className="rounded-full bg-red-100 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-200"
                   >
-                    ✕
+                    Remove
                   </button>
                 </div>
               ))}
             </div>
 
-            <div className="glassmorphism rounded-2xl p-8 shadow-xl">
-              <div className="flex items-center justify-between mb-8">
-                <span className="text-2xl font-semibold text-stone-800">Total Amount</span>
-                <span className="text-4xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent">
-                  GH₵{cartTotal.toFixed(2)}
-                </span>
+            <div className="rounded-3xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
+              <div className="flex items-center justify-between text-2xl font-black text-stone-900">
+                <span>Total</span>
+                <span>GH₵{cartTotal.toFixed(2)}</span>
               </div>
-
-              {!showCheckout ? (
-                <button
-                  onClick={() => setShowCheckout(true)}
-                  className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white py-4 rounded-full font-semibold text-lg shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300"
-                >
-                  Proceed to Checkout
-                </button>
-              ) : (
-                <form onSubmit={handleCheckoutSubmit} className="space-y-6">
-                  <h3 className="text-2xl font-bold text-stone-800 mb-8 text-center">Complete Your Order</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-stone-700 mb-2">Full Name</label>
-                      <input
-                        type="text"
-                        required
-                        value={checkoutForm.customerName}
-                        onChange={(e) => setCheckoutForm({ ...checkoutForm, customerName: e.target.value })}
-                        className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300"
-                        placeholder="Enter your name"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-stone-700 mb-2">Email</label>
-                      <input
-                        type="email"
-                        required
-                        value={checkoutForm.customerEmail}
-                        onChange={(e) => setCheckoutForm({ ...checkoutForm, customerEmail: e.target.value })}
-                        className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300"
-                        placeholder="your@email.com"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-stone-700 mb-2">Phone</label>
-                      <input
-                        type="tel"
-                        required
-                        value={checkoutForm.customerPhone}
-                        onChange={(e) => setCheckoutForm({ ...checkoutForm, customerPhone: e.target.value })}
-                        className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300"
-                        placeholder="024 123 4567"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-stone-700 mb-2">Order Type</label>
-                      <select
-                        value={checkoutForm.orderType}
-                        onChange={(e) => setCheckoutForm({ ...checkoutForm, orderType: e.target.value })}
-                        className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300"
-                      >
-                        <option value="Retail">Retail</option>
-                        <option value="Wholesale">Wholesale</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-stone-700 mb-2">Delivery Type</label>
-                      <select
-                        value={checkoutForm.deliveryType}
-                        onChange={(e) => setCheckoutForm({ ...checkoutForm, deliveryType: e.target.value })}
-                        className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300"
-                      >
-                        <option value="Pickup">Pickup</option>
-                        <option value="Delivery">Delivery</option>
-                      </select>
-                    </div>
-                    {checkoutForm.deliveryType === 'Delivery' && (
-                      <div>
-                        <label className="block text-sm font-medium text-stone-700 mb-2">Delivery Address</label>
-                        <input
-                          type="text"
-                          required
-                          value={checkoutForm.deliveryAddress}
-                          onChange={(e) => setCheckoutForm({ ...checkoutForm, deliveryAddress: e.target.value })}
-                          className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300"
-                          placeholder="Enter your address"
-                        />
-                      </div>
-                    )}
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-stone-700 mb-2">Preferred Date & Time</label>
-                      <input
-                        type="datetime-local"
-                        value={checkoutForm.deliveryDate}
-                        onChange={(e) => setCheckoutForm({ ...checkoutForm, deliveryDate: e.target.value })}
-                        className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300"
-                      />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-stone-700 mb-2">
-                        Customer Note / Special Instructions
-                      </label>
-                      <textarea
-                        rows={3}
-                        value={checkoutForm.customerNote}
-                        onChange={(e) => setCheckoutForm({ ...checkoutForm, customerNote: e.target.value })}
-                        className="w-full px-6 py-4 border-2 border-amber-200 rounded-2xl focus:border-amber-500 focus:outline-none transition-all duration-300 resize-none"
-                        placeholder="Add special instructions (e.g., allergies, delivery preferences, custom messages)"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex gap-6 pt-6">
-                    <button
-                      type="button"
-                      onClick={() => setShowCheckout(false)}
-                      className="flex-1 border-2 border-amber-600 text-amber-700 hover:bg-amber-100 py-4 rounded-full font-semibold transition-all duration-300"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isSubmitting}
-                      className="flex-1 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white py-4 rounded-full font-semibold shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300"
-                    >
-                      {isSubmitting ? 'Connecting to Paystack...' : 'Place Order 🎉'}
-                    </button>
-                  </div>
-                </form>
-              )}
+              <Link href="/products" className="mt-6 inline-flex rounded-full border border-stone-300 bg-white px-5 py-3 font-semibold text-stone-800 hover:border-stone-400">
+                Keep shopping
+              </Link>
             </div>
-          </>
+          </div>
         )}
       </main>
     </div>
