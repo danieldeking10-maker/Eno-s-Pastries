@@ -96,7 +96,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     syncTimeoutRef.current = setTimeout(async () => {
       try {
         setIsCloudSynced(false);
-        await fetch('/api/cart/session', {
+        const response = await fetch('/api/cart/session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -104,7 +104,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
             items: cart,
           }),
         });
-        setIsCloudSynced(true);
+        const result = await response.json().catch(() => ({}));
+        setIsCloudSynced(response.ok && result?.success === true);
       } catch {
         // Soft fail on network issues; localStorage retains user items
         setIsCloudSynced(false);
