@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   Lock,
   KeyRound,
@@ -19,6 +20,7 @@ import {
 } from 'lucide-react'
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  const router = useRouter()
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [passcode, setPasscode] = useState('')
   const [showPasscode, setShowPasscode] = useState(false)
@@ -31,7 +33,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       const params = new URLSearchParams(window.location.search)
       if (params.get('lock') === 'true' || params.get('logout') === 'true') {
         await fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined)
-        if (!cancelled) setIsAuthenticated(false)
+        if (!cancelled) router.replace('/admin-access')
         return
       }
 
@@ -48,7 +50,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [router])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -74,9 +76,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined)
-    setIsAuthenticated(false)
-    setPasscode('')
-    setError(null)
+    router.replace('/admin-access')
   }
 
   // Verification state while checking session storage

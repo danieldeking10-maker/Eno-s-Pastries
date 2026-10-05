@@ -1,5 +1,8 @@
 import crypto from 'crypto'
 import { cookies } from 'next/headers'
+import { isAdminEmail as isAllowedAdminEmail } from '@/lib/admin-access'
+
+export { isAdminEmail } from '@/lib/admin-access'
 
 const SESSION_COOKIE = 'auth_session'
 const SESSION_DURATION_SECONDS = 8 * 60 * 60
@@ -17,14 +20,6 @@ function getAuthSecret() {
 
 export function hasAuthSecret() {
   return getAuthSecret() !== null
-}
-
-export function isAdminEmail(email: string) {
-  const normalized = email.trim().toLowerCase()
-  const customAdminEmails = process.env.ADMIN_EMAILS
-    ? process.env.ADMIN_EMAILS.split(',').map((e) => e.trim().toLowerCase())
-    : []
-  return customAdminEmails.length > 0 && customAdminEmails.includes(normalized)
 }
 
 export function createSessionCookieValue(payload: { email: string; role: string }) {
@@ -67,7 +62,7 @@ export function readSessionCookieValue(value: string | undefined): SessionPayloa
 export async function hasAdminSession() {
   const cookieStore = await cookies()
   const session = readSessionCookieValue(cookieStore.get(SESSION_COOKIE)?.value)
-  return session?.role === 'ADMIN'
+  return session?.role === 'ADMIN' && isAllowedAdminEmail(session.email)
 }
 
 export function hashPassword(password: string) {

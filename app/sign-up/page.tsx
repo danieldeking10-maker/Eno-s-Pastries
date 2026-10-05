@@ -32,7 +32,7 @@ export default function SignUpPage() {
         return
       }
 
-      router.push('/admin')
+      router.push(data?.canAccessAdmin ? '/admin-access' : '/')
     } catch (e: any) {
       setError(e?.message ?? 'Signup failed')
     } finally {
@@ -41,54 +41,63 @@ export default function SignUpPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-amber-50 to-orange-50 flex items-center justify-center px-4 py-10">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-md p-8">
+    <main className="min-h-screen min-h-[100dvh] bg-gradient-to-b from-amber-50 to-orange-50 flex items-start sm:items-center justify-center overflow-y-auto px-4 py-6 sm:py-10">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-md p-6 sm:p-8">
         <h1 className="text-3xl font-bold text-amber-900 mb-2">Sign up</h1>
-        <p className="text-stone-600 mb-6">Create an admin account for Eno&apos;s Pastries</p>
+        <p className="text-stone-700 mb-6">Create your Eno&apos;s Pastries account to place and track orders.</p>
 
         {error && (
-          <div className="mb-4 rounded-lg bg-red-50 border border-red-200 text-red-700 px-4 py-3">
+          <div role="alert" className="mb-4 rounded-lg bg-red-50 border border-red-200 text-red-800 px-4 py-3">
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+              <label htmlFor="signup-name" className="block text-base font-semibold text-stone-900 mb-1">Full name</label>
             <input
+                id="signup-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               type="text"
+                autoComplete="name"
               placeholder="e.g. Daniel Ankrah"
-              className="w-full px-4 py-2 border-2 border-amber-200 rounded-lg focus:border-amber-500 focus:outline-none"
+                className="w-full min-h-12 px-4 py-3 text-base text-stone-900 border-2 border-stone-300 rounded-lg focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 focus:outline-none"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <label htmlFor="signup-email" className="block text-base font-semibold text-stone-900 mb-1">Email address</label>
             <input
+                id="signup-email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               type="email"
+                inputMode="email"
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
               required
               placeholder="your@email.com"
-              className="w-full px-4 py-2 border-2 border-amber-200 rounded-lg focus:border-amber-500 focus:outline-none"
+                className="w-full min-h-12 px-4 py-3 text-base text-stone-900 border-2 border-stone-300 rounded-lg focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 focus:outline-none"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+              <label htmlFor="signup-password" className="block text-base font-semibold text-stone-900 mb-1">Password</label>
             <div className="relative">
               <input
+                  id="signup-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 type={showPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
                 required
-                placeholder="••••••••"
-                className="w-full px-4 py-2 pr-10 border-2 border-amber-200 rounded-lg focus:border-amber-500 focus:outline-none"
+                  className="w-full min-h-12 px-4 py-3 pr-12 text-base text-stone-900 border-2 border-stone-300 rounded-lg focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 focus:outline-none"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((prev) => !prev)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-amber-700 focus:outline-none p-1"
+                className="absolute right-2 top-1/2 -translate-y-1/2 min-h-11 min-w-11 flex items-center justify-center text-stone-600 hover:text-amber-800 focus:outline-none"
                 title={showPassword ? 'Hide password' : 'Show password'}
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
               >
@@ -98,8 +107,9 @@ export default function SignUpPage() {
           </div>
 
           <button
+            type="submit"
             disabled={loading}
-            className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white py-3 rounded-lg font-semibold shadow-lg disabled:opacity-60 transition-all duration-200"
+            className="w-full min-h-12 bg-gradient-to-r from-amber-700 to-orange-700 hover:from-amber-800 hover:to-orange-800 text-white py-3 rounded-lg font-semibold shadow-lg disabled:opacity-60 transition-all duration-200"
           >
             {loading ? 'Creating account...' : 'Create Account'}
           </button>
@@ -112,7 +122,7 @@ export default function SignUpPage() {
           </Link>
         </div>
       </div>
-    </div>
+    </main>
   )
 }
 

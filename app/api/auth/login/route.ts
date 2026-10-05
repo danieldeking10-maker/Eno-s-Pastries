@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createSessionCookieValue, hasAuthSecret, verifyPassword } from '@/lib/auth'
+import { isAdminEmail } from '@/lib/admin-access'
 import prisma from '@/lib/prisma'
 
 export async function POST(request: Request) {
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
     const role = user.role || 'CUSTOMER'
 
     const sessionCookie = createSessionCookieValue({ email, role })
-    const res = NextResponse.json({ ok: true, role })
+    const res = NextResponse.json({ ok: true, role, canAccessAdmin: isAdminEmail(user.email) })
     res.cookies.set('auth_session', sessionCookie, {
       httpOnly: true,
       sameSite: 'lax',

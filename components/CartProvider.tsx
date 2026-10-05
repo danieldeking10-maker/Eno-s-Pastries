@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
 import { Product } from './ProductCard';
 
 type CartContextType = {
@@ -10,6 +10,8 @@ type CartContextType = {
   clearCart: () => void;
   cartCount: number;
   cartTotal: number;
+  sessionId: string;
+  isCloudSynced: boolean;
 };
 
 const LOCAL_CART_KEY = 'enos_cart_v1';
@@ -38,7 +40,7 @@ function normalizeCartItem(value: unknown): Product | null {
 
 function readLocalCart(): Product[] | null {
   try {
-    const stored = window.localStorage.getItem(LOCAL_CART_KEY);
+    const stored = window.localStorage.getItem(LOCAL_CART_KEY) ?? window.localStorage.getItem('enosPastriesCart');
     if (stored === null) return null;
     const parsed: unknown = JSON.parse(stored);
     return Array.isArray(parsed)
@@ -53,7 +55,10 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<Product[]>([]);
+  const [sessionId, setSessionId] = useState<string>('');
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isCloudSynced, setIsCloudSynced] = useState(true);
+  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const handleWindowError = (e: ErrorEvent) => {
@@ -65,20 +70,51 @@ export function CartProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('error', handleWindowError);
   }, []);
 
+  // Restore this browser's cart first, then try the cloud backups.
   useEffect(() => {
     let cancelled = false;
 
     async function loadCart() {
       let remoteCart: Product[] | null = null;
+
       try {
-        const response = await fetch('/api/cart', { cache: 'no-store' });
-        if (!response.ok) throw new Error('Cart storage is unavailable');
-        const data = await response.json().catch(() => ({}));
-        remoteCart = Array.isArray(data?.cart)
-          ? data.cart
+        let sid = localStorage.getItem('enosPastriesCartSessionId') || '';
+        if (!sid) {
+          sid = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+            ? crypto.randomUUID()
+            : `cart_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+          localStorage.setItem('enosPastriesCartSessionId', sid);
+        }
+        if (!cancelled) setSessionId(sid);
+
+        const localCart = readLocalCart();
+        if (localCart !== null) {
+          if (!cancelled) setCart(localCart);
+          return;
+        }
+
+        const sessionResponse = await fetch(`/api/cart/session?sessionId=${encodeURIComponent(sid)}`, { cache: 'no-store' });
+        if (sessionResponse.ok) {
+          const sessionData = await sessionResponse.json().catch(() => ({}));
+          const sessionItems = sessionData?.cartSession?.items;
+          if (Array.isArray(sessionItems)) {
+            remoteCart = sessionItems
               .map(normalizeCartItem)
-              .filter((item: Product | null): item is Product => item !== null)
-          : [];
+              .filter((item: Product | null): item is Product => item !== null);
+          }
+        }
+
+        if (remoteCart === null) {
+          const response = await fetch('/api/cart', { cache: 'no-store' });
+          if (response.ok) {
+            const data = await response.json().catch(() => ({}));
+            if (Array.isArray(data?.cart)) {
+              remoteCart = data.cart
+                .map(normalizeCartItem)
+                .filter((item: Product | null): item is Product => item !== null);
+            }
+          }
+        }
       } catch {
         console.warn("Cart storage unavailable; using this browser's saved cart.");
       } finally {
@@ -94,23 +130,47 @@ export function CartProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Save locally immediately and debounce remote backup writes.
   useEffect(() => {
-    if (!isLoaded) return;
+    if (!isLoaded || !sessionId) return;
     try {
       window.localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(cart));
     } catch (err) {
       console.warn('Could not save cart in this browser:', err);
     }
-    void fetch('/api/cart', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cart }),
-    }).then((response) => {
-      if (!response.ok) throw new Error('Cart storage is unavailable');
-    }).catch(() => {
-      console.warn("Cart storage unavailable; changes are saved in this browser.");
-    });
-  }, [cart, isLoaded]);
+
+    if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+    syncTimeoutRef.current = setTimeout(async () => {
+      let synced = false;
+      try {
+        const response = await fetch('/api/cart/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId, items: cart }),
+        });
+        synced = response.ok;
+      } catch {
+        synced = false;
+      }
+      if (!synced) {
+        try {
+          const response = await fetch('/api/cart', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cart }),
+          });
+          synced = response.ok;
+        } catch {
+          synced = false;
+        }
+      }
+      setIsCloudSynced(synced);
+    }, 700);
+
+    return () => {
+      if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+    };
+  }, [cart, isLoaded, sessionId]);
 
   const addToCart = useCallback((product: Product) => {
     const normalizedProduct = normalizeCartItem(product);
@@ -128,7 +188,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const clearCart = useCallback(() => {
     setCart([]);
-  }, []);
+    if (sessionId) {
+      fetch(`/api/cart/session?sessionId=${encodeURIComponent(sessionId)}`, {
+        method: 'DELETE',
+      }).catch(() => {});
+    }
+  }, [sessionId]);
 
   const cartCount = useMemo(() => cart.length, [cart]);
   const cartTotal = useMemo(
@@ -137,8 +202,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ cart, addToCart, removeFromCart, clearCart, cartCount, cartTotal }),
-    [cart, addToCart, removeFromCart, clearCart, cartCount, cartTotal],
+    () => ({ cart, addToCart, removeFromCart, clearCart, cartCount, cartTotal, sessionId, isCloudSynced }),
+    [cart, addToCart, removeFromCart, clearCart, cartCount, cartTotal, sessionId, isCloudSynced],
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createSessionCookieValue, hasAuthSecret, hashPassword } from '@/lib/auth'
+import { isAdminEmail } from '@/lib/admin-access'
 import prisma from '@/lib/prisma'
 
 export async function POST(request: Request) {
@@ -26,6 +27,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'An account with this email already exists. Please sign in.' }, { status: 409 })
     }
 
+    if (isAdminEmail(email)) {
+      return NextResponse.json({ error: 'Admin accounts must be provisioned before they can sign in.' }, { status: 403 })
+    }
+
     const storedPassword = hashPassword(password)
 
     const user = await prisma.user.create({
@@ -39,7 +44,7 @@ export async function POST(request: Request) {
     })
 
     const sessionCookie = createSessionCookieValue({ email: user.email, role: user.role })
-    const res = NextResponse.json({ ok: true, userId: user.id, role: user.role })
+    const res = NextResponse.json({ ok: true, userId: user.id, role: user.role, canAccessAdmin: isAdminEmail(user.email) })
     res.cookies.set('auth_session', sessionCookie, {
       httpOnly: true,
       sameSite: 'lax',
