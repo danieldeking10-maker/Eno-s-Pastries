@@ -5,6 +5,7 @@ import { isAdminEmail as isAllowedAdminEmail } from '@/lib/admin-access'
 export { isAdminEmail } from '@/lib/admin-access'
 
 const SESSION_COOKIE = 'auth_session'
+const ADMIN_SESSION_COOKIE = 'admin_session'
 const SESSION_DURATION_SECONDS = 8 * 60 * 60
 
 type SessionPayload = {
@@ -15,6 +16,11 @@ type SessionPayload = {
 
 function getAuthSecret() {
   const secret = process.env.AUTH_SECRET || ''
+  return secret.length >= 32 ? secret : null
+}
+
+function getAdminSecret() {
+  const secret = process.env.ADMIN_SESSION_SECRET || ''
   return secret.length >= 32 ? secret : null
 }
 
@@ -34,16 +40,20 @@ export function createSessionCookieValue(payload: { email: string; role: string 
   return `${encodedPayload}.${signature}`
 }
 
-export function readSessionCookieValue(value: string | undefined): SessionPayload | null {
-  const secret = getAuthSecret()
-  if (!secret || !value) return null
+export function createVerifiedAuthSessionCookieValue(email: string) {
+  return createSessionCookieValue({ email, role: 'CUSTOMER' })
+}
+
+export function readSessionCookieValue(value: string | undefined, secret?: string | null): SessionPayload | null {
+  const resolvedSecret = secret ?? getAuthSecret()
+  if (!resolvedSecret || !value) return null
 
   const separator = value.lastIndexOf('.')
   if (separator <= 0) return null
 
   const encodedPayload = value.slice(0, separator)
   const signature = value.slice(separator + 1)
-  const expected = crypto.createHmac('sha256', secret).update(encodedPayload).digest()
+  const expected = crypto.createHmac('sha256', resolvedSecret).update(encodedPayload).digest()
   const supplied = Buffer.from(signature, 'hex')
   if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) return null
 
@@ -59,10 +69,31 @@ export function readSessionCookieValue(value: string | undefined): SessionPayloa
   }
 }
 
+export function readAdminSessionCookieValue(value: string | undefined): SessionPayload | null {
+  const secret = getAdminSecret()
+  if (!secret || !value) return null
+  return readSessionCookieValue(value, secret)
+}
+
 export async function hasAdminSession() {
   const cookieStore = await cookies()
   const session = readSessionCookieValue(cookieStore.get(SESSION_COOKIE)?.value)
   return session?.role === 'ADMIN' && isAllowedAdminEmail(session.email)
+}
+
+export async function getAdminSessionEmailFromToken(
+  adminToken: string | undefined,
+  authToken: string | undefined
+): Promise<string | null> {
+  const adminPayload = readAdminSessionCookieValue(adminToken)
+  const authPayload = readSessionCookieValue(authToken)
+
+  if (!adminPayload || !authPayload) return null
+  if (adminPayload.role !== 'ADMIN') return null
+  if (!isAllowedAdminEmail(adminPayload.email)) return null
+  if (adminPayload.email.toLowerCase() !== authPayload.email.toLowerCase()) return null
+
+  return adminPayload.email
 }
 
 export function hashPassword(password: string) {
