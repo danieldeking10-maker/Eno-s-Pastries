@@ -235,15 +235,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Failed to initialize payment' }, { status: 500 })
   }
 }
-    }
-
-    return NextResponse.json({
-      authorizationUrl,
-      reference,
-      orderId: order.id,
-    })
-  } catch (error: any) {
-    console.error('Paystack initialize error:', error)
-    return NextResponse.json({ error: error?.message || 'Paystack initialize failed' }, { status: 500 })
-  }
-}
