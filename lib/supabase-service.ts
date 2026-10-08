@@ -292,6 +292,10 @@ export async function checkSupabaseStatus() {
       message = 'Supabase connected (Read-Only). Product updates require SUPABASE_SERVICE_ROLE_KEY or public RLS update policy.'
     }
 
+    if (!isServiceRole && !isKeyMalformed && !message.includes('SUPABASE_SERVICE_ROLE_KEY')) {
+      message += '. Cloud cart backups and order mirroring require SUPABASE_SERVICE_ROLE_KEY.'
+    }
+
     return {
       connected: true,
       tablesReady,
@@ -838,6 +842,8 @@ export async function deleteProduct(id: string): Promise<boolean> {
  * Uses exact PostgreSQL lowercase column schema to prevent PostgREST errors.
  */
 export async function saveOrderToSupabase(orderData: any, orderItems: any[]) {
+  if (!hasServiceRole()) return { success: false }
+
   try {
     const client = getSupabaseClient()
     const nowIso = new Date().toISOString()
@@ -926,6 +932,10 @@ export async function saveCartSessionToSupabase(
   items: any[],
   metadata?: any
 ): Promise<{ success: boolean; cartSession?: CartSessionData; error?: string }> {
+  if (!hasServiceRole()) {
+    return { success: false, error: 'SUPABASE_SERVICE_ROLE_KEY is not configured' }
+  }
+
   try {
     const client = getSupabaseClient()
     const fileName = `${sessionId.replace(/[^a-zA-Z0-9_-]/g, '')}.json`
@@ -971,6 +981,10 @@ export async function saveCartSessionToSupabase(
 export async function getCartSessionFromSupabase(
   sessionId: string
 ): Promise<{ success: boolean; cartSession?: CartSessionData; error?: string }> {
+  if (!hasServiceRole()) {
+    return { success: false, error: 'SUPABASE_SERVICE_ROLE_KEY is not configured' }
+  }
+
   try {
     const client = getSupabaseClient()
     const fileName = `${sessionId.replace(/[^a-zA-Z0-9_-]/g, '')}.json`
@@ -994,6 +1008,8 @@ export async function getCartSessionFromSupabase(
  * Removes a customer's cart session from Supabase Storage once converted to order
  */
 export async function deleteCartSessionFromSupabase(sessionId: string): Promise<boolean> {
+  if (!hasServiceRole()) return false
+
   try {
     const client = getSupabaseClient()
     const fileName = `${sessionId.replace(/[^a-zA-Z0-9_-]/g, '')}.json`

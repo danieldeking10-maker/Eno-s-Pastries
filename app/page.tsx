@@ -31,12 +31,6 @@ export default function Home() {
             >
               📋 Order History
             </Link>
-            <Link
-              href="/admin"
-              className="border-2 border-amber-600 text-amber-700 hover:bg-amber-600 hover:text-white px-8 py-4 rounded-full font-semibold text-lg transition-all duration-300"
-            >
-              Admin
-            </Link>
           </div>
         </div>
 

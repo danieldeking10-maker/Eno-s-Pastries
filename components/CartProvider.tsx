@@ -143,12 +143,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
     syncTimeoutRef.current = setTimeout(async () => {
       let synced = false;
       try {
+        setIsCloudSynced(false);
         const response = await fetch('/api/cart/session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sessionId, items: cart }),
         });
-        synced = response.ok;
+        const result = await response.json().catch(() => ({}));
+        synced = response.ok && result?.success === true;
       } catch {
         synced = false;
       }

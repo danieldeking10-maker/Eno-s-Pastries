@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { getSupabaseBrowserClient } from '@/lib/supabase-browser'
@@ -11,13 +11,15 @@ function AuthCallbackContent() {
   const code = searchParams.get('code')
   const requestedNext = searchParams.get('next') || '/'
   const next = requestedNext.startsWith('/') && !requestedNext.startsWith('//') ? requestedNext : '/'
+  const providerError = searchParams.get('error_description') || searchParams.get('error')
   const [error, setError] = useState<string | null>(null)
+  const completionRef = useRef<{ key: string; promise: Promise<void> } | null>(null)
 
   useEffect(() => {
     let cancelled = false
+    const callbackKey = `${code || ''}:${providerError || ''}`
 
     const completeSignIn = async () => {
-      const providerError = searchParams.get('error_description') || searchParams.get('error')
       if (providerError) {
         setError(providerError)
         return
@@ -28,37 +30,50 @@ function AuthCallbackContent() {
         return
       }
 
-      const { data, error: exchangeError } = await getSupabaseBrowserClient().auth.exchangeCodeForSession(code)
-      if (exchangeError || !data.session) {
-        setError(exchangeError?.message || 'Could not complete sign in. Please request a new link.')
-        return
+      const supabase = getSupabaseBrowserClient()
+      let session = null
+
+      const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+      session = data.session
+
+      if (!session && exchangeError) {
+        const { data: existingSession } = await supabase.auth.getSession()
+        session = existingSession.session
+        if (!session) throw exchangeError
+      }
+
+      if (!session) {
+        throw new Error('Google did not return an active session. Please try signing in again.')
       }
 
       const response = await fetch('/api/auth/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ access_token: data.session.access_token }),
+        body: JSON.stringify({ access_token: session.access_token }),
       })
 
       if (!response.ok) {
         const result = await response.json().catch(() => ({}))
-        setError(result.error || 'Your account was verified, but sign in could not be completed.')
-        return
+        throw new Error(result.error || 'Your account was verified, but sign in could not be completed.')
       }
-
-      if (!cancelled) router.replace(next)
     }
 
-    void completeSignIn().catch((reason: unknown) => {
-      if (!cancelled) {
-        setError(reason instanceof Error ? reason.message : 'Could not complete sign in. Please try again.')
-      }
-    })
+    if (!completionRef.current || completionRef.current.key !== callbackKey) {
+      completionRef.current = { key: callbackKey, promise: completeSignIn() }
+    }
+
+    completionRef.current.promise
+      .then(() => {
+        if (!cancelled) router.replace(next)
+      })
+      .catch((reason: unknown) => {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : 'Could not complete sign in. Please try again.')
+      })
 
     return () => {
       cancelled = true
     }
-  }, [code, next, router, searchParams])
+  }, [code, next, providerError, router, searchParams])
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-amber-50 px-4 py-12">
