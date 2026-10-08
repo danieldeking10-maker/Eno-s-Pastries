@@ -38,6 +38,7 @@ export async function GET(request: Request) {
         customerPhone?: { contains: string }
         customerName?: { contains: string }
         id?: { contains: string }
+        paystackReference?: { contains: string }
       }> = [
         { customerEmail: { contains: query } },
         { customerPhone: { contains: query } },
