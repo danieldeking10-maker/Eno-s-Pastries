@@ -7,14 +7,34 @@ import { useCart } from '@/components/CartProvider'
 export default function Header() {
   const { cartCount } = useCart()
   const [isScrolled, setIsScrolled] = useState(false)
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
 
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 50)
     }
     window.addEventListener('scroll', handleScroll)
+
+    // Check auth status
+    const checkAuth = async () => {
+      try {
+        const res = await fetch('/api/auth/session', { cache: 'no-store' })
+        const data = await res.json().catch(() => ({}))
+        setIsAuthenticated(data?.authenticated === true)
+      } catch {
+        setIsAuthenticated(false)
+      }
+    }
+    checkAuth()
+
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
+
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined)
+    setIsAuthenticated(false)
+    window.location.href = '/'
+  }
 
   return (
     <header
@@ -41,8 +61,48 @@ export default function Header() {
                 <span className="bg-amber-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">{cartCount}</span>
               )}
             </Link>
+            {isAuthenticated === null ? (
+              <span className="text-stone-400 text-sm">Loading...</span>
+            ) : isAuthenticated ? (
+              <>
+                <Link href="/admin" className="text-stone-700 hover:text-amber-700 font-medium transition-colors duration-300 flex items-center gap-1">
+                  🔐 Admin
+                </Link>
+                <button
+                  onClick={handleLogout}
+                  className="text-stone-700 hover:text-amber-700 font-medium transition-colors duration-300 flex items-center gap-1"
+                >
+                  🚪 Logout
+                </button>
+              </>
+            ) : (
+              <Link href="/sign-in" className="text-stone-700 hover:text-amber-700 font-medium transition-colors duration-300 flex items-center gap-1">
+                👤 Sign In
+              </Link>
+            )}
           </nav>
-          <Link href="/cart" className="md:hidden bg-gradient-to-r from-amber-600 to-orange-600 text-white px-6 py-2 rounded-full font-medium shadow-lg">Order Now</Link>
+          <div className="md:hidden flex items-center gap-3">
+            <Link href="/cart" className="bg-gradient-to-r from-amber-600 to-orange-600 text-white px-4 py-2 rounded-full font-medium shadow-lg">
+              Order Now
+            </Link>
+            {isAuthenticated ? (
+              <>
+                <Link href="/admin" className="bg-amber-100 hover:bg-amber-200 text-amber-900 border-2 border-amber-300 px-3 py-1.5 rounded-full font-medium text-sm transition-all duration-300">
+                  Admin
+                </Link>
+                <button
+                  onClick={handleLogout}
+                  className="bg-stone-100 hover:bg-stone-200 text-stone-700 border-2 border-stone-300 px-3 py-1.5 rounded-full font-medium text-sm transition-all duration-300"
+                >
+                  Logout
+                </button>
+              </>
+            ) : (
+              <Link href="/sign-in" className="bg-gradient-to-r from-amber-600 to-orange-600 text-white px-4 py-2 rounded-full font-medium shadow-lg">
+                Sign In
+              </Link>
+            )}
+          </div>
         </div>
       </div>
     </header>
