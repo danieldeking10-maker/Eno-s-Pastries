@@ -19,7 +19,7 @@ function getAuthSecret() {
   return secret.length >= 32 ? secret : null
 }
 
-function getAdminSecret() {
+export function getAdminSecret() {
   const secret = process.env.ADMIN_SESSION_SECRET || ''
   return secret.length >= 32 ? secret : null
 }
