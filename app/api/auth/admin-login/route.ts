@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { cookies } from 'next/headers'
-import { createSessionCookieValue, hasAuthSecret, isAdminEmail, readSessionCookieValue } from '@/lib/auth'
+import { createSessionCookieValue, hasAuthSecret, isAdminEmail, readSessionCookieValue, getAdminSecret } from '@/lib/auth'
 
 export async function POST(request: Request) {
   const expectedPasscode = process.env.ADMIN_PASSCODE || ''
@@ -26,13 +26,36 @@ export async function POST(request: Request) {
 
   try {
     const response = NextResponse.json({ ok: true }, { headers: { 'Cache-Control': 'no-store' } })
-    response.cookies.set('auth_session', createSessionCookieValue({ email: signedInUser.email, role: 'ADMIN' }), {
+    
+    // Set auth_session with ADMIN role
+    const authSessionCookie = createSessionCookieValue({ email: signedInUser.email, role: 'ADMIN' })
+    response.cookies.set('auth_session', authSessionCookie, {
       httpOnly: true,
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
       path: '/',
       maxAge: 8 * 60 * 60,
     })
+    
+    // Also set admin_session cookie (required by middleware)
+    const adminSecret = getAdminSecret()
+    if (adminSecret) {
+      const encodedPayload = Buffer.from(JSON.stringify({
+        email: signedInUser.email,
+        role: 'ADMIN',
+        exp: Math.floor(Date.now() / 1000) + 8 * 60 * 60,
+      })).toString('base64url')
+      const adminSignature = crypto.createHmac('sha256', adminSecret).update(encodedPayload).digest('hex')
+      const adminSessionCookie = `${encodedPayload}.${adminSignature}`
+      response.cookies.set('admin_session', adminSessionCookie, {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+        path: '/',
+        maxAge: 8 * 60 * 60,
+      })
+    }
+    
     return response
   } catch {
     return NextResponse.json({ error: 'Admin authentication is not configured' }, { status: 503 })
