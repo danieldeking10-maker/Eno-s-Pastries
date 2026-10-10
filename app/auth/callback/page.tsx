@@ -13,6 +13,7 @@ function AuthCallbackContent() {
   const next = requestedNext.startsWith('/') && !requestedNext.startsWith('//') ? requestedNext : '/'
   const providerError = searchParams.get('error_description') || searchParams.get('error')
   const [error, setError] = useState<string | null>(null)
+  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading')
   const completionRef = useRef<{ key: string; promise: Promise<void> } | null>(null)
 
   useEffect(() => {
@@ -22,11 +23,13 @@ function AuthCallbackContent() {
     const completeSignIn = async () => {
       if (providerError) {
         setError(providerError)
+        setStatus('error')
         return
       }
 
       if (!code) {
         setError('This sign-in link is missing its authorization code. Please try again.')
+        setStatus('error')
         return
       }
 
@@ -56,6 +59,8 @@ function AuthCallbackContent() {
         const result = await response.json().catch(() => ({}))
         throw new Error(result.error || 'Your account was verified, but sign in could not be completed.')
       }
+
+      setStatus('success')
     }
 
     if (!completionRef.current || completionRef.current.key !== callbackKey) {
@@ -64,16 +69,37 @@ function AuthCallbackContent() {
 
     completionRef.current.promise
       .then(() => {
-        if (!cancelled) router.replace(next)
+        if (!cancelled && status === 'success') {
+          setTimeout(() => router.replace(next), 800)
+        }
       })
       .catch((reason: unknown) => {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : 'Could not complete sign in. Please try again.')
+        if (!cancelled) {
+          setError(reason instanceof Error ? reason.message : 'Could not complete sign in. Please try again.')
+          setStatus('error')
+        }
       })
 
     return () => {
       cancelled = true
     }
-  }, [code, next, providerError, router, searchParams])
+  }, [code, next, providerError, router, searchParams, status])
+
+  if (status === 'success') {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-amber-50 px-4 py-12">
+        <div className="w-full max-w-sm rounded-2xl border border-amber-100 bg-white p-8 text-center shadow-lg">
+          <div className="mx-auto h-12 w-12 rounded-full bg-emerald-100 flex items-center justify-center mb-4">
+            <svg className="h-7 w-7 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h1 className="text-xl font-bold text-stone-900">Sign in complete</h1>
+          <p className="mt-2 text-sm text-stone-600">Redirecting...</p>
+        </div>
+      </main>
+    )
+  }
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-amber-50 px-4 py-12">

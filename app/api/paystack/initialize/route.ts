@@ -13,6 +13,15 @@ function normalizeLookupValue(value: unknown) {
 }
 
 export async function POST(request: Request) {
+  // Check database configuration early
+  if (!process.env.DATABASE_URL || !process.env.DATABASE_URL.startsWith('postgresql://')) {
+    console.error('[Paystack Init] DATABASE_URL not configured')
+    return NextResponse.json(
+      { error: 'Database not configured. Please contact support.' },
+      { status: 503 }
+    )
+  }
+
   try {
     const reqBody = await request.json().catch(() => ({}))
     const {
