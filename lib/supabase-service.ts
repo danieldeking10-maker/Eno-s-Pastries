@@ -1022,3 +1022,158 @@ export async function deleteCartSessionFromSupabase(sessionId: string): Promise<
   }
 }
 
+/**
+ * Fetches all orders with item details from Supabase cloud database
+ */
+export async function getOrdersFromSupabase(filter?: {
+  email?: string
+  phone?: string
+  query?: string
+  isAdmin?: boolean
+}) {
+  try {
+    const client = getSupabaseClient()
+    let q = client.from('orders').select('*, items:order_items(*)').order('createdat', { ascending: false })
+
+    if (filter?.email && filter?.phone) {
+      q = q.or(`customeremail.ilike.%${filter.email}%,customerphone.ilike.%${filter.phone}%`)
+    } else if (filter?.email) {
+      q = q.ilike('customeremail', `%${filter.email}%`)
+    } else if (filter?.phone) {
+      q = q.ilike('customerphone', `%${filter.phone}%`)
+    } else if (filter?.query) {
+      if (filter.isAdmin) {
+        q = q.or(`customeremail.ilike.%${filter.query}%,customerphone.ilike.%${filter.query}%,customername.ilike.%${filter.query}%,id.ilike.%${filter.query}%,paystackreference.ilike.%${filter.query}%`)
+      } else {
+        q = q.or(`customeremail.ilike.%${filter.query}%,customerphone.ilike.%${filter.query}%`)
+      }
+    }
+
+    const { data, error } = await withTimeout(q, 5000)
+    if (error || !Array.isArray(data)) return []
+
+    const products = await getProducts()
+    const productMap = new Map(products.map((p) => [p.id, p]))
+
+    return data.map((o: any) => ({
+      id: o.id,
+      userId: o.userid,
+      totalAmount: Number(o.totalamount) || 0,
+      status: o.status || 'PENDING',
+      orderType: o.ordertype || 'RETAIL',
+      deliveryType: o.deliverytype || 'PICKUP',
+      deliveryAddress: o.deliveryaddress,
+      deliveryDate: o.deliverydate,
+      customerName: o.customername,
+      customerEmail: o.customeremail,
+      customerPhone: o.customerphone,
+      customerNote: o.customernote,
+      paystackReference: o.paystackreference,
+      paystackTransactionId: o.paystacktransactionid,
+      paymentChannel: o.paymentchannel,
+      paymentCurrency: o.paymentcurrency,
+      paidAt: o.paidat,
+      createdAt: o.createdat,
+      updatedAt: o.updatedat,
+      items: Array.isArray(o.items)
+        ? o.items.map((it: any) => {
+            const prod = productMap.get(it.productid)
+            return {
+              id: it.id,
+              orderId: it.orderid,
+              productId: it.productid,
+              quantity: it.quantity,
+              price: it.price,
+              product: prod ? { name: prod.name, imageUrl: prod.imageUrl, category: prod.category } : null,
+            }
+          })
+        : [],
+    }))
+  } catch (err) {
+    console.warn('Error fetching orders from Supabase:', err)
+    return []
+  }
+}
+
+/**
+ * Fetches a single order by ID from Supabase
+ */
+export async function getOrderByIdFromSupabase(id: string) {
+  try {
+    const client = getSupabaseClient()
+    const { data: o, error } = await withTimeout(
+      client.from('orders').select('*, items:order_items(*)').eq('id', id).maybeSingle(),
+      4000
+    )
+    if (error || !o) return null
+
+    const products = await getProducts()
+    const productMap = new Map(products.map((p) => [p.id, p]))
+
+    return {
+      id: o.id,
+      userId: o.userid,
+      totalAmount: Number(o.totalamount) || 0,
+      status: o.status || 'PENDING',
+      orderType: o.ordertype || 'RETAIL',
+      deliveryType: o.deliverytype || 'PICKUP',
+      deliveryAddress: o.deliveryaddress,
+      deliveryDate: o.deliverydate,
+      customerName: o.customername,
+      customerEmail: o.customeremail,
+      customerPhone: o.customerphone,
+      customerNote: o.customernote,
+      paystackReference: o.paystackreference,
+      paystackTransactionId: o.paystacktransactionid,
+      paymentChannel: o.paymentchannel,
+      paymentCurrency: o.paymentcurrency,
+      paidAt: o.paidat,
+      createdAt: o.createdat,
+      updatedAt: o.updatedat,
+      items: Array.isArray(o.items)
+        ? o.items.map((it: any) => {
+            const prod = productMap.get(it.productid)
+            return {
+              id: it.id,
+              orderId: it.orderid,
+              productId: it.productid,
+              quantity: it.quantity,
+              price: it.price,
+              product: prod ? { name: prod.name, imageUrl: prod.imageUrl, category: prod.category } : null,
+            }
+          })
+        : [],
+    }
+  } catch (err) {
+    console.warn('Error fetching order by ID from Supabase:', err)
+    return null
+  }
+}
+
+/**
+ * Updates order status in Supabase
+ */
+export async function updateOrderStatusInSupabase(id: string, status: string, paymentDetails?: any) {
+  try {
+    const client = getSupabaseClient()
+    const updatePayload: Record<string, any> = {
+      status,
+      updatedat: new Date().toISOString(),
+    }
+    if (paymentDetails) {
+      if (paymentDetails.paystackTransactionId) updatePayload.paystacktransactionid = paymentDetails.paystackTransactionId
+      if (paymentDetails.paymentChannel) updatePayload.paymentchannel = paymentDetails.paymentChannel
+      if (paymentDetails.paymentCurrency) updatePayload.paymentcurrency = paymentDetails.paymentCurrency
+      if (paymentDetails.paidAt) updatePayload.paidat = new Date(paymentDetails.paidAt).toISOString()
+    }
+    const { data, error } = await withTimeout(
+      client.from('orders').update(updatePayload).eq('id', id).select().maybeSingle(),
+      4000
+    )
+    return !error && !!data
+  } catch (err) {
+    console.warn('Error updating order status in Supabase:', err)
+    return false
+  }
+}
+
