@@ -39,9 +39,14 @@ async function hasAdminSession(token: string | undefined) {
   }
 }
 
+function getSecret() {
+  const secret = process.env.AUTH_SECRET || process.env.ADMIN_SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+  return secret.length >= 32 ? secret : null
+}
+
 async function getVerifiedSession(token: string | undefined) {
-  const secret = process.env.AUTH_SECRET
-  if (!token || !secret || secret.length < 32) return null
+  const secret = getSecret()
+  if (!token || !secret) return null
 
   const separator = token.lastIndexOf('.')
   if (separator < 1) return null
@@ -72,9 +77,16 @@ async function hasValidAdminSession(adminToken: string | undefined, authToken: s
     getVerifiedSession(adminToken),
     getVerifiedSession(authToken),
   ])
-  const adminEmail = String(adminSession?.email || '').trim().toLowerCase()
-  const authEmail = String(authSession?.email || '').trim().toLowerCase()
-  return !!adminEmail && adminEmail === authEmail && isAdminEmail(adminEmail)
+
+  if (adminSession && adminSession.role === 'ADMIN' && isAdminEmail(adminSession.email)) {
+    return true
+  }
+
+  if (authSession && authSession.role === 'ADMIN' && isAdminEmail(authSession.email)) {
+    return true
+  }
+
+  return false
 }
 
 export async function middleware(request: NextRequest) {

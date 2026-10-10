@@ -909,7 +909,7 @@ export default function UserDashboardPage() {
                           </span>
                           {order.deliveryDate && (
                             <span className="block text-amber-800 text-[11px] font-medium mt-0.5">
-                              Scheduled: {new Date(order.deliveryDate).toLocaleDateString()}
+                              Scheduled: {new Date(order.deliveryDate).toLocaleString()}
                             </span>
                           )}
                         </div>

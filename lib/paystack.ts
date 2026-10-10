@@ -23,11 +23,11 @@ export function getAppOrigin(request: Request): string {
   try {
     const parsed = new URL(request.url)
     if (parsed.hostname === '0.0.0.0') {
-      return parsed.origin
+      return `${parsed.protocol}//localhost${parsed.port ? `:${parsed.port}` : ''}`
     }
     return parsed.origin
   } catch {
-    throw new Error('Unable to determine app origin. Set NEXT_PUBLIC_APP_URL.')
+    return 'http://localhost:3000'
   }
 }
 

@@ -43,13 +43,23 @@ export async function POST(request: Request) {
     }
 
     const sessionCookie = createVerifiedAuthSessionCookieValue(email)
-    const res = NextResponse.json({ ok: true, role, email })
+    const res = NextResponse.json({ ok: true, role, email, isAdmin, canAccessAdmin: isAdmin })
     res.cookies.set('auth_session', sessionCookie, {
       httpOnly: true,
       sameSite: 'lax',
       path: '/',
       secure: process.env.NODE_ENV === 'production',
+      maxAge: 8 * 60 * 60,
     })
+    if (isAdmin) {
+      res.cookies.set('admin_session', sessionCookie, {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 8 * 60 * 60,
+      })
+    }
 
     return res
   } catch (e: any) {

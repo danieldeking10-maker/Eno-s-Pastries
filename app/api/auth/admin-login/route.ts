@@ -26,7 +26,15 @@ export async function POST(request: Request) {
 
   try {
     const response = NextResponse.json({ ok: true }, { headers: { 'Cache-Control': 'no-store' } })
-    response.cookies.set('auth_session', createSessionCookieValue({ email: signedInUser.email, role: 'ADMIN' }), {
+    const adminCookieValue = createSessionCookieValue({ email: signedInUser.email, role: 'ADMIN' })
+    response.cookies.set('auth_session', adminCookieValue, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: 8 * 60 * 60,
+    })
+    response.cookies.set('admin_session', adminCookieValue, {
       httpOnly: true,
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',

@@ -170,6 +170,7 @@ export default function AdminOrdersPage() {
                       <p className="text-sm text-gray-500">
                         {prettyOrderType(order.orderType)} • {prettyDeliveryType(order.deliveryType)}
                         {order.deliveryAddress ? ` • ${order.deliveryAddress}` : ''}
+                        {order.deliveryDate ? ` • Preferred Date & Time: ${new Date(order.deliveryDate).toLocaleString()}` : ''}
                       </p>
                       {order.customerNote && (
                         <div className="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-sm text-stone-800">
@@ -328,8 +329,8 @@ export default function AdminOrdersPage() {
                 </div>
                 {selectedPrintOrder.deliveryDate && (
                   <div className="flex justify-between">
-                    <span className="text-stone-500">Scheduled Date:</span>
-                    <span>{selectedPrintOrder.deliveryDate}</span>
+                    <span className="text-stone-500">Scheduled Date & Time:</span>
+                    <span>{new Date(selectedPrintOrder.deliveryDate).toLocaleString()}</span>
                   </div>
                 )}
                 <div className="flex justify-between">

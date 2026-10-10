@@ -15,12 +15,12 @@ type SessionPayload = {
 }
 
 function getAuthSecret() {
-  const secret = process.env.AUTH_SECRET || ''
+  const secret = process.env.AUTH_SECRET || process.env.ADMIN_SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
   return secret.length >= 32 ? secret : null
 }
 
-function getAdminSecret() {
-  const secret = process.env.ADMIN_SESSION_SECRET || ''
+export function getAdminSecret() {
+  const secret = process.env.ADMIN_SESSION_SECRET || process.env.AUTH_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
   return secret.length >= 32 ? secret : null
 }
 
@@ -41,7 +41,8 @@ export function createSessionCookieValue(payload: { email: string; role: string 
 }
 
 export function createVerifiedAuthSessionCookieValue(email: string) {
-  return createSessionCookieValue({ email, role: 'CUSTOMER' })
+  const role = isAllowedAdminEmail(email) ? 'ADMIN' : 'CUSTOMER'
+  return createSessionCookieValue({ email, role })
 }
 
 export function readSessionCookieValue(value: string | undefined, secret?: string | null): SessionPayload | null {

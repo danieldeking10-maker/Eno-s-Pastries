@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma'
 import crypto from 'crypto'
 import { getProducts, saveOrderToSupabase } from '@/lib/supabase-service'
 import { getPaystackCurrency, getPaystackSecretKey } from '@/lib/paystack-payment'
+import { getAppOrigin } from '@/lib/paystack'
 
 function ghp(amount: number) {
   return Math.round(amount * 100)
@@ -123,14 +124,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Order total must be greater than zero' }, { status: 400 })
     }
 
+    const normalizedOrderType = String(orderType ?? '').toUpperCase() === 'WHOLESALE' ? 'WHOLESALE' : 'RETAIL'
+    const normalizedDeliveryType = String(deliveryType ?? '').toUpperCase() === 'DELIVERY' ? 'DELIVERY' : 'PICKUP'
+    let parsedDeliveryDate: Date | null = null
+    if (deliveryDate) {
+      const d = new Date(deliveryDate)
+      if (!Number.isNaN(d.getTime())) {
+        parsedDeliveryDate = d
+      }
+    }
+
     const order = await prisma.order.create({
       data: {
         totalAmount: calculatedTotal,
         status: 'PENDING',
-        orderType: orderType ?? 'RETAIL',
-        deliveryType: deliveryType ?? 'PICKUP',
+        orderType: normalizedOrderType,
+        deliveryType: normalizedDeliveryType,
         deliveryAddress: deliveryAddress ?? null,
-        deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
+        deliveryDate: parsedDeliveryDate,
         customerName: customerName || 'Valued Customer',
         customerEmail,
         customerPhone: customerPhone || '',
@@ -157,7 +168,7 @@ export async function POST(request: Request) {
     }
 
     const PAYSTACK_SECRET_KEY = getPaystackSecretKey()
-    const origin = new URL(request.url).origin
+    const origin = getAppOrigin(request)
 
     if (!PAYSTACK_SECRET_KEY) {
       await prisma.order.update({
