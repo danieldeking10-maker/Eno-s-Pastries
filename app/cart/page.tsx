@@ -30,18 +30,31 @@ export default function CartPage() {
     setLoading(true)
 
     try {
-      const items = cart.map(item => ({
-        productId: item.id,
-        name: item.name,
-        quantity: 1,
-        price: Number(item.price),
-      }))
+      // Group items by productId to handle quantities properly
+      const itemMap = new Map<string, { productId: string; name: string; price: number; quantity: number }>()
+      
+      cart.forEach(item => {
+        const key = item.id
+        if (itemMap.has(key)) {
+          itemMap.get(key)!.quantity += 1
+        } else {
+          itemMap.set(key, {
+            productId: item.id,
+            name: item.name,
+            price: Number(item.price || 0),
+            quantity: 1,
+          })
+        }
+      })
+
+      const items = Array.from(itemMap.values())
 
       const res = await fetch('/api/paystack/initialize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
+          deliveryAddress: formData.deliveryType === 'DELIVERY' ? formData.deliveryAddress : '',
           items,
           totalAmount: cartTotal,
           orderType: 'RETAIL',
@@ -55,6 +68,8 @@ export default function CartPage() {
       }
 
       if (data.authorizationUrl) {
+        // Clear cart after successful payment initiation
+        clearCart()
         window.location.href = data.authorizationUrl
       }
     } catch (e: any) {
