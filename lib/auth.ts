@@ -20,7 +20,11 @@ function getAuthSecret() {
 }
 
 export function getAdminSecret() {
+<<<<<<< HEAD
   const secret = process.env.ADMIN_SESSION_SECRET || process.env.AUTH_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+=======
+  const secret = process.env.ADMIN_SESSION_SECRET || ''
+>>>>>>> ddd2b30eb1dd5314a3b94a8ac7755345fd87cb21
   return secret.length >= 32 ? secret : null
 }
 

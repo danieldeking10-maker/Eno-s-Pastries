@@ -38,7 +38,7 @@ function SignInContent() {
         return
       }
 
-      router.push(data?.canAccessAdmin ? '/admin-access' : redirectTarget)
+      router.push(data?.canAccessAdmin ? '/admin' : redirectTarget)
     } catch (e: any) {
       setError(e?.message ?? 'Login failed. Please try again.')
     } finally {
@@ -57,7 +57,7 @@ function SignInContent() {
       const { data, error: signInError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${origin}/auth/callback`,
+          redirectTo: `${origin}/auth/callback?next=${encodeURIComponent(redirectTarget)}`,
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
