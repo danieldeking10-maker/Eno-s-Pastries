@@ -15,8 +15,10 @@ function normalizeLookupValue(value: unknown) {
 
 export async function POST(request: Request) {
   // Check database configuration early
-  if (!process.env.DATABASE_URL || !process.env.DATABASE_URL.startsWith('postgresql://')) {
-    console.error('[Paystack Init] DATABASE_URL not configured')
+  const dbUrl = (process.env.DATABASE_URL || '').trim()
+  const isPostgres = dbUrl.startsWith('postgresql://') || dbUrl.startsWith('postgres://')
+  if (!isPostgres && !process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    console.error('[Paystack Init] Neither DATABASE_URL (PostgreSQL) nor Supabase is configured')
     return NextResponse.json(
       { error: 'Database not configured. Please contact support.' },
       { status: 503 }
@@ -47,7 +49,7 @@ export async function POST(request: Request) {
     }
 
     const itemsToCreate = []
-    const localProducts = await prisma.product.findMany()
+    const localProducts = await prisma.product.findMany().catch(() => [])
     const remoteProducts = await getProducts(true)
 
     for (const item of items) {
@@ -114,7 +116,7 @@ export async function POST(request: Request) {
             ingredients: JSON.stringify(matched.ingredients || []),
             available: !!matched.available,
           },
-        })
+        }).catch(() => {})
       }
 
       itemsToCreate.push({
@@ -133,6 +135,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Order total must be greater than zero' }, { status: 400 })
     }
 
+<<<<<<< HEAD
     const normalizedOrderType = String(orderType ?? '').toUpperCase() === 'WHOLESALE' ? 'WHOLESALE' : 'RETAIL'
     const normalizedDeliveryType = String(deliveryType ?? '').toUpperCase() === 'DELIVERY' ? 'DELIVERY' : 'PICKUP'
     let parsedDeliveryDate: Date | null = null
@@ -145,6 +148,47 @@ export async function POST(request: Request) {
 
     const order = await prisma.order.create({
       data: {
+=======
+    const initialReference = `order_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`
+    let order: any = null
+    try {
+      order = await prisma.order.create({
+        data: {
+          totalAmount: calculatedTotal,
+          status: 'PENDING',
+          orderType: orderType ?? 'RETAIL',
+          deliveryType: deliveryType ?? 'PICKUP',
+          deliveryAddress: deliveryAddress ?? null,
+          deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
+          customerName: customerName || 'Valued Customer',
+          customerEmail,
+          customerPhone: customerPhone || '',
+          customerNote: customerNote || null,
+          paystackReference: initialReference,
+          items: {
+            create: itemsToCreate,
+          },
+        },
+        include: { items: true },
+      })
+    } catch (createErr) {
+      console.warn('[Paystack Init] Prisma create notice, using Supabase direct:', createErr)
+    }
+
+    const fallbackOrderId = order?.id || crypto.randomUUID()
+    const reference = `order_${fallbackOrderId}_${crypto.randomBytes(4).toString('hex')}`
+
+    let orderWithReference = order
+    if (order) {
+      orderWithReference = await prisma.order.update({
+        where: { id: order.id },
+        data: { paystackReference: reference },
+        include: { items: true },
+      }).catch(() => order)
+    } else {
+      orderWithReference = {
+        id: fallbackOrderId,
+>>>>>>> fa1e5daf740243493ffb201daae84fd8baadd0fd
         totalAmount: calculatedTotal,
         status: 'PENDING',
         orderType: normalizedOrderType,
@@ -155,20 +199,11 @@ export async function POST(request: Request) {
         customerEmail,
         customerPhone: customerPhone || '',
         customerNote: customerNote || null,
-        paystackReference: `order_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
-        items: {
-          create: itemsToCreate,
-        },
-      },
-      include: { items: true },
-    })
-
-    const reference = `order_${order.id}_${crypto.randomBytes(4).toString('hex')}`
-    const orderWithReference = await prisma.order.update({
-      where: { id: order.id },
-      data: { paystackReference: reference },
-      include: { items: true },
-    })
+        paystackReference: reference,
+        createdAt: new Date(),
+        items: itemsToCreate,
+      }
+    }
 
     try {
       await saveOrderToSupabase(orderWithReference, itemsToCreate)

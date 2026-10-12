@@ -60,25 +60,32 @@ function AuthCallbackContent() {
         throw new Error(result.error || 'Your account was verified, but sign in could not be completed.')
       }
 
+      const syncData = await response.json().catch(() => ({}))
       setStatus('success')
+
+      const finalDestination =
+        syncData?.canAccessAdmin && (next === '/' || next === '/sign-in')
+          ? '/admin'
+          : next
+
+      if (!cancelled) {
+        setTimeout(() => {
+          router.replace(finalDestination)
+          router.refresh()
+        }, 500)
+      }
     }
 
     if (!completionRef.current || completionRef.current.key !== callbackKey) {
       completionRef.current = { key: callbackKey, promise: completeSignIn() }
     }
 
-    completionRef.current.promise
-      .then(() => {
-        if (!cancelled && status === 'success') {
-          setTimeout(() => router.replace(next), 800)
-        }
-      })
-      .catch((reason: unknown) => {
-        if (!cancelled) {
-          setError(reason instanceof Error ? reason.message : 'Could not complete sign in. Please try again.')
-          setStatus('error')
-        }
-      })
+    completionRef.current.promise.catch((reason: unknown) => {
+      if (!cancelled) {
+        setError(reason instanceof Error ? reason.message : 'Could not complete sign in. Please try again.')
+        setStatus('error')
+      }
+    })
 
     return () => {
       cancelled = true

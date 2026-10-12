@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { recordVerifiedPayment, transactionMatchesOrder, verifyPaystackTransaction } from '@/lib/paystack-payment'
 import { hasAdminSession } from '@/lib/auth'
+import { getOrderByIdFromSupabase, updateOrderStatusInSupabase } from '@/lib/supabase-service'
 
 export async function GET(
   request: Request,
@@ -13,10 +14,19 @@ export async function GET(
     }
 
     const { id } = await params
-    const order = await prisma.order.findUnique({
-      where: { id },
-      include: { items: { include: { product: true } } },
-    })
+    let order: any = null
+    try {
+      order = await prisma.order.findUnique({
+        where: { id },
+        include: { items: { include: { product: true } } },
+      })
+    } catch (prismaErr) {
+      console.warn('[Order GET by ID] Prisma query note, checking Supabase:', prismaErr)
+    }
+
+    if (!order) {
+      order = await getOrderByIdFromSupabase(id)
+    }
 
     if (!order) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 })
@@ -51,7 +61,17 @@ export async function PUT(
       return NextResponse.json({ error: 'Invalid order status' }, { status: 400 })
     }
 
-    const order = await prisma.order.findUnique({ where: { id } })
+    let order: any = null
+    try {
+      order = await prisma.order.findUnique({ where: { id } })
+    } catch (prismaErr) {
+      console.warn('[Order PUT] Prisma query note, checking Supabase:', prismaErr)
+    }
+
+    if (!order) {
+      order = await getOrderByIdFromSupabase(id)
+    }
+
     if (!order) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
@@ -77,13 +97,24 @@ export async function PUT(
       return NextResponse.json({ error: 'A successful Paystack payment is required before fulfillment' }, { status: 409 })
     }
 
-    const updated = await prisma.order.update({
-      where: { id },
-      data: { status },
-      include: { items: { include: { product: true } } },
-    })
+    let updated: any = null
+    try {
+      updated = await prisma.order.update({
+        where: { id },
+        data: { status },
+        include: { items: { include: { product: true } } },
+      })
+    } catch (prismaUpdateErr) {
+      console.warn('[Order PUT] Prisma update note, updating in Supabase:', prismaUpdateErr)
+    }
 
-    return NextResponse.json(updated)
+    await updateOrderStatusInSupabase(id, status)
+
+    if (!updated) {
+      updated = await getOrderByIdFromSupabase(id)
+    }
+
+    return NextResponse.json(updated || { id, status, success: true })
   } catch (error) {
     console.error('Error updating order status:', error)
     return NextResponse.json({ error: 'Failed to update order' }, { status: 500 })

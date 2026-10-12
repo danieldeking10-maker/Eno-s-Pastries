@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { recordVerifiedPayment, transactionMatchesOrder, verifyPaystackTransaction } from '@/lib/paystack-payment'
+import { recordVerifiedPayment, transactionMatchesOrder, verifyPaystackTransaction, getPaystackSecretKey } from '@/lib/paystack-payment'
 
 export async function GET(request: Request) {
   const origin = new URL(request.url).origin
@@ -11,7 +11,7 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${origin}/dashboard?payment=missing_reference`)
   }
 
-  const PAYSTACK_SECRET_KEY = (process.env.PAYSTACK_SECRET_KEY || '').replace(/["'\r\n\s]/g, '')
+  const PAYSTACK_SECRET_KEY = getPaystackSecretKey()
   if (!PAYSTACK_SECRET_KEY) {
     const existingOrder = await prisma.order.findFirst({
       where: { paystackReference: reference },
@@ -25,7 +25,15 @@ export async function GET(request: Request) {
   }
 
   try {
-    const order = await prisma.order.findUnique({ where: { paystackReference: reference } })
+    let order: any = null
+    try {
+      order = await prisma.order.findUnique({ where: { paystackReference: reference } })
+    } catch {}
+    if (!order) {
+      const { getOrderByReferenceFromSupabase } = await import('@/lib/supabase-service')
+      order = await getOrderByReferenceFromSupabase(reference)
+    }
+
     const transaction = await verifyPaystackTransaction(reference)
 
     if (!transaction || !order || !transactionMatchesOrder(transaction, reference, order)) {

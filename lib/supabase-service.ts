@@ -862,6 +862,10 @@ export async function saveOrderToSupabase(orderData: any, orderItems: any[]) {
       customerphone: String(orderData.customerPhone || ''),
       customernote: orderData.customerNote ? String(orderData.customerNote) : null,
       paystackreference: orderData.paystackReference ? String(orderData.paystackReference) : null,
+      paystacktransactionid: orderData.paystackTransactionId ? String(orderData.paystackTransactionId) : null,
+      paymentchannel: orderData.paymentChannel ? String(orderData.paymentChannel) : null,
+      paymentcurrency: orderData.paymentCurrency ? String(orderData.paymentCurrency) : null,
+      paidat: orderData.paidAt ? new Date(orderData.paidAt).toISOString() : null,
       createdat: orderData.createdAt ? new Date(orderData.createdAt).toISOString() : nowIso,
       updatedat: nowIso,
     }
@@ -901,20 +905,169 @@ export async function syncOrderPaymentToSupabase(orderId: string, paymentDetails
   paidAt: Date
 }) {
   const client = getSupabaseClient()
-  const { data, error } = await withTimeout(
-    client.from('orders').update({
-      status: 'CONFIRMED',
-      paystacktransactionid: paymentDetails.paystackTransactionId,
-      paymentchannel: paymentDetails.paymentChannel,
-      paymentcurrency: paymentDetails.paymentCurrency,
-      paidat: paymentDetails.paidAt.toISOString(),
-      updatedat: new Date().toISOString(),
-    }).eq('id', orderId).select('id').maybeSingle(),
+  const nowIso = new Date().toISOString()
+
+  // First try updating with all payment fields
+  const fullPayload: Record<string, any> = {
+    status: 'CONFIRMED',
+    paystacktransactionid: paymentDetails.paystackTransactionId,
+    paymentchannel: paymentDetails.paymentChannel,
+    paymentcurrency: paymentDetails.paymentCurrency,
+    paidat: paymentDetails.paidAt.toISOString(),
+    updatedat: nowIso,
+  }
+
+  const { error: fullError } = await withTimeout(
+    client.from('orders').update(fullPayload).eq('id', orderId),
     4000
-  )
-  if (error) throw error
-  if (!data) throw new Error(`Supabase order ${orderId} was not found for payment sync`)
+  ).catch((e) => ({ error: e }))
+
+  if (fullError) {
+    // Fallback: update status and timestamp only if extended columns are not present
+    const basePayload = {
+      status: 'CONFIRMED',
+      updatedat: nowIso,
+    }
+    await withTimeout(
+      client.from('orders').update(basePayload).eq('id', orderId),
+      4000
+    ).catch(() => {})
+  }
 }
+
+function formatSupabaseOrder(o: any, items: any[] = []): any {
+  return {
+    id: String(o.id),
+    userId: o.userid || null,
+    totalAmount: Number(o.totalamount || o.totalAmount) || 0,
+    status: o.status || 'PENDING',
+    orderType: o.ordertype || o.orderType || 'RETAIL',
+    deliveryType: o.deliverytype || o.deliveryType || 'PICKUP',
+    deliveryAddress: o.deliveryaddress || o.deliveryAddress || null,
+    deliveryDate: o.deliverydate || o.deliveryDate || null,
+    customerName: o.customername || o.customerName || 'Customer',
+    customerEmail: o.customeremail || o.customerEmail || '',
+    customerPhone: o.customerphone || o.customerPhone || '',
+    customerNote: o.customernote || o.customerNote || null,
+    paystackReference: o.paystackreference || o.paystackReference || null,
+    paystackTransactionId: o.paystacktransactionid || o.paystackTransactionId || null,
+    paidAt: o.paidat || o.paidAt || null,
+    paymentChannel: o.paymentchannel || o.paymentChannel || null,
+    paymentCurrency: o.paymentcurrency || o.paymentCurrency || null,
+    createdAt: o.createdat || o.createdAt || new Date().toISOString(),
+    updatedAt: o.updatedat || o.updatedAt || new Date().toISOString(),
+    items: items.map((it: any) => ({
+      id: String(it.id),
+      orderId: String(it.orderid || it.orderId || o.id),
+      productId: String(it.productid || it.productId),
+      quantity: Number(it.quantity) || 1,
+      price: Number(it.price) || 0,
+      createdAt: it.createdat || it.createdAt || new Date().toISOString(),
+      product: it.product || null,
+    })),
+  }
+}
+
+export async function getOrdersFromSupabase(where?: any): Promise<any[]> {
+  try {
+    const client = getSupabaseClient()
+    let query = client.from('orders').select('*').order('createdat', { ascending: false })
+
+    if (where?.customerEmail?.contains) {
+      query = query.ilike('customeremail', `%${where.customerEmail.contains}%`)
+    }
+    if (where?.customerPhone?.contains) {
+      query = query.ilike('customerphone', `%${where.customerPhone.contains}%`)
+    }
+
+    const { data: rawOrders, error } = await withTimeout(query, 4000)
+    if (error || !rawOrders) return []
+
+    const orderIds = rawOrders.map((o: any) => o.id)
+    let orderItems: any[] = []
+    if (orderIds.length > 0) {
+      const itemsRes = await withTimeout(
+        client.from('order_items').select('*').in('orderid', orderIds),
+        4000
+      ).catch(() => ({ data: [] }))
+      orderItems = itemsRes.data || []
+    }
+
+    const allProds = await getProducts().catch(() => [])
+
+    return rawOrders.map((o: any) => {
+      const matchedItems = orderItems
+        .filter((it: any) => it.orderid === o.id)
+        .map((it: any) => {
+          const prod = allProds.find((p) => p.id === it.productid)
+          return {
+            ...it,
+            product: prod || null,
+          }
+        })
+      return formatSupabaseOrder(o, matchedItems)
+    })
+  } catch (err) {
+    console.warn('[Supabase getOrders warning]:', err)
+    return []
+  }
+}
+
+export async function getOrderByIdFromSupabase(id: string): Promise<any | null> {
+  try {
+    const client = getSupabaseClient()
+    const { data: order, error } = await withTimeout(
+      client.from('orders').select('*').eq('id', id).maybeSingle(),
+      4000
+    )
+    if (error || !order) return null
+
+    const { data: items } = await withTimeout(
+      client.from('order_items').select('*').eq('orderid', id),
+      4000
+    ).catch(() => ({ data: [] }))
+
+    const allProds = await getProducts().catch(() => [])
+    const enrichedItems = (items || []).map((it: any) => ({
+      ...it,
+      product: allProds.find((p) => p.id === it.productid) || null,
+    }))
+
+    return formatSupabaseOrder(order, enrichedItems)
+  } catch (err) {
+    console.warn('[Supabase getOrderById warning]:', err)
+    return null
+  }
+}
+
+export async function getOrderByReferenceFromSupabase(reference: string): Promise<any | null> {
+  try {
+    const client = getSupabaseClient()
+    const { data: order, error } = await withTimeout(
+      client.from('orders').select('*').eq('paystackreference', reference).maybeSingle(),
+      4000
+    )
+    if (error || !order) return null
+    return formatSupabaseOrder(order)
+  } catch {
+    return null
+  }
+}
+
+export async function updateOrderStatusInSupabase(id: string, status: string): Promise<boolean> {
+  try {
+    const client = getSupabaseClient()
+    const { error } = await withTimeout(
+      client.from('orders').update({ status, updatedat: new Date().toISOString() }).eq('id', id),
+      4000
+    )
+    return !error
+  } catch (err) {
+    console.warn('[Supabase updateOrderStatus warning]:', err)
+    return false
+  }
+}
+
 export interface CartSessionData {
   sessionId: string
   items: any[]

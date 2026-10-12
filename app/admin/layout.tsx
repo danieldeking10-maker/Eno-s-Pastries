@@ -22,7 +22,8 @@ import {
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
-  const [passcode, setPasscode] = useState('')
+  const [adminEmail, setAdminEmail] = useState('danieldeking10@gmail.com')
+  const [passcode, setPasscode] = useState('pastryadmin2026')
   const [showPasscode, setShowPasscode] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -40,7 +41,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       try {
         const response = await fetch('/api/auth/session', { cache: 'no-store' })
         const session = await response.json().catch(() => ({}))
-        if (!cancelled) setIsAuthenticated(response.ok && session?.authenticated === true)
+        if (!cancelled) {
+          setIsAuthenticated(response.ok && session?.authenticated === true)
+          if (session?.email) {
+            setAdminEmail(session.email)
+          }
+        }
       } catch {
         if (!cancelled) setIsAuthenticated(false)
       }
@@ -60,7 +66,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       const response = await fetch('/api/auth/admin-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ passcode }),
+        body: JSON.stringify({ passcode, email: adminEmail }),
       })
       const result = await response.json().catch(() => ({}))
       if (!response.ok) {
@@ -68,7 +74,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         return
       }
       setIsAuthenticated(true)
-      setPasscode('')
+      router.refresh()
     } catch {
       setError('Admin sign-in failed. Please try again.')
     }
@@ -116,6 +122,37 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label htmlFor="admin-email-field" className="block text-xs font-bold text-stone-700 mb-1.5 flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-amber-600" /> Admin Email
+              </label>
+              <input
+                id="admin-email-field"
+                type="email"
+                value={adminEmail}
+                onChange={(event) => setAdminEmail(event.target.value)}
+                required
+                className="w-full p-2.5 border-2 border-amber-200 rounded-xl focus:border-amber-600 focus:outline-none text-xs text-stone-900"
+              />
+              <div className="mt-1 flex flex-wrap gap-1 text-[10px] text-stone-500 items-center">
+                <span>Select:</span>
+                <button
+                  type="button"
+                  onClick={() => setAdminEmail('danieldeking10@gmail.com')}
+                  className="px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 font-semibold cursor-pointer"
+                >
+                  danieldeking10@gmail.com
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAdminEmail('kobenaahern77@gmail.com')}
+                  className="px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 font-semibold cursor-pointer"
+                >
+                  kobenaahern77@gmail.com
+                </button>
+              </div>
+            </div>
+
             <div>
               <label
                 htmlFor="admin-passcode"

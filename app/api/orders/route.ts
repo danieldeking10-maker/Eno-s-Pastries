@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { saveOrderToSupabase, getProducts } from '@/lib/supabase-service';
+import { saveOrderToSupabase, getProducts, getOrdersFromSupabase } from '@/lib/supabase-service';
 import { hasAdminSession } from '@/lib/auth';
+import crypto from 'crypto';
 
 export async function GET(request: Request) {
   try {
@@ -53,11 +54,22 @@ export async function GET(request: Request) {
       where = { OR: searchFields }
     }
 
-    const orders = await prisma.order.findMany({
-      where,
-      include: { items: { include: { product: true } } },
-      orderBy: { createdAt: 'desc' },
-    })
+    let orders: any[] = []
+    let prismaSuccess = false
+    try {
+      orders = await prisma.order.findMany({
+        where,
+        include: { items: { include: { product: true } } },
+        orderBy: { createdAt: 'desc' },
+      })
+      prismaSuccess = true
+    } catch (prismaErr) {
+      console.warn('[Orders GET] Prisma query note, attempting Supabase fallback:', prismaErr)
+    }
+
+    if (!prismaSuccess) {
+      orders = await getOrdersFromSupabase(where)
+    }
 
     return NextResponse.json(orders)
   } catch (error) {
@@ -76,10 +88,12 @@ export async function POST(request: Request) {
     }
 
     const itemsToCreate = [];
-    let allProducts = await prisma.product.findMany();
-    if (allProducts.length === 0) {
-      await getProducts();
+    let allProducts: any[] = []
+    try {
       allProducts = await prisma.product.findMany();
+    } catch {}
+    if (allProducts.length === 0) {
+      allProducts = await getProducts();
     }
 
     for (const item of rawItems) {
@@ -110,8 +124,34 @@ export async function POST(request: Request) {
 
     const totalAmount = itemsToCreate.reduce((sum, item) => sum + item.price * item.quantity, 0)
 
-    const order = await prisma.order.create({
-      data: {
+    let order: any = null
+    try {
+      order = await prisma.order.create({
+        data: {
+          totalAmount,
+          status: 'PENDING',
+          orderType: body.orderType ?? 'RETAIL',
+          deliveryType: body.deliveryType ?? 'PICKUP',
+          deliveryAddress: body.deliveryAddress,
+          deliveryDate: body.deliveryDate ? new Date(body.deliveryDate) : null,
+          customerName: body.customerName || 'Customer',
+          customerEmail: body.customerEmail || '',
+          customerPhone: body.customerPhone || '',
+          customerNote: body.customerNote || null,
+          items: {
+            create: itemsToCreate,
+          },
+        },
+        include: { items: { include: { product: true } } },
+      });
+    } catch (prismaCreateErr) {
+      console.warn('[Orders POST] Prisma create note, creating via Supabase:', prismaCreateErr)
+    }
+
+    if (!order) {
+      const generatedId = crypto.randomUUID()
+      const fallbackOrderData = {
+        id: generatedId,
         totalAmount,
         status: 'PENDING',
         orderType: body.orderType ?? 'RETAIL',
@@ -122,17 +162,29 @@ export async function POST(request: Request) {
         customerEmail: body.customerEmail || '',
         customerPhone: body.customerPhone || '',
         customerNote: body.customerNote || null,
-        items: {
-          create: itemsToCreate,
-        },
-      },
-      include: { items: { include: { product: true } } },
-    });
-
-    try {
-      await saveOrderToSupabase(order, itemsToCreate);
-    } catch (e) {
-      console.warn('Supabase order mirror error:', e);
+        createdAt: new Date(),
+      }
+      await saveOrderToSupabase(fallbackOrderData, itemsToCreate)
+      order = {
+        ...fallbackOrderData,
+        items: itemsToCreate.map((item) => {
+          const prod = allProducts.find((p) => p.id === item.productId)
+          return {
+            id: crypto.randomUUID(),
+            orderId: generatedId,
+            productId: item.productId,
+            quantity: item.quantity,
+            price: item.price,
+            product: prod || null,
+          }
+        }),
+      }
+    } else {
+      try {
+        await saveOrderToSupabase(order, itemsToCreate);
+      } catch (e) {
+        console.warn('Supabase order mirror error:', e);
+      }
     }
 
     return NextResponse.json(order, { status: 201 });

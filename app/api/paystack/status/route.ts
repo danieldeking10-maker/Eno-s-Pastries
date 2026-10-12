@@ -12,7 +12,14 @@ export async function GET(request: Request) {
   }
 
   try {
-    const order = await prisma.order.findUnique({ where: { paystackReference: reference } })
+    let order: any = null
+    try {
+      order = await prisma.order.findUnique({ where: { paystackReference: reference } })
+    } catch {}
+    if (!order) {
+      const { getOrderByReferenceFromSupabase } = await import('@/lib/supabase-service')
+      order = await getOrderByReferenceFromSupabase(reference)
+    }
     if (!order) return NextResponse.json({ payment: 'error' }, { status: 404 })
 
     const transaction = await verifyPaystackTransaction(reference)

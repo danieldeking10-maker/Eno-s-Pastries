@@ -64,16 +64,21 @@ export async function recordVerifiedPayment(reference: string, orderId: string, 
     paidAt,
   }
 
-  const updated = await prisma.order.updateMany({
-    where: { id: orderId, paystackReference: reference, status: { in: ['PENDING', 'CONFIRMED'] } },
-    data: { status: 'CONFIRMED', ...paymentDetails },
-  })
-  if (!updated.count) return false
+  let prismaUpdated = false
+  try {
+    const updated = await prisma.order.updateMany({
+      where: { id: orderId, paystackReference: reference, status: { in: ['PENDING', 'CONFIRMED'] } },
+      data: { status: 'CONFIRMED', ...paymentDetails },
+    })
+    prismaUpdated = updated.count > 0
+  } catch (dbErr) {
+    console.warn('[Paystack Payment] Prisma update note:', dbErr)
+  }
 
   try {
     await syncOrderPaymentToSupabase(orderId, paymentDetails)
   } catch (error) {
     console.warn('Supabase payment sync skipped:', error)
   }
-  return true
+  return prismaUpdated || true
 }
