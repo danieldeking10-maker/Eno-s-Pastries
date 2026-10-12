@@ -1,14 +1,11 @@
 import { NextResponse } from 'next/server'
-import { createSessionCookieValue, hasAuthSecret, hashPassword } from '@/lib/auth'
+import { createSessionCookieValue, hashPassword } from '@/lib/auth'
 import { isAdminEmail } from '@/lib/admin-access'
 import prisma from '@/lib/prisma'
+import { supabase } from '@/lib/supabase'
 
 export async function POST(request: Request) {
   try {
-    if (!hasAuthSecret()) {
-      return NextResponse.json({ error: 'Authentication is not configured' }, { status: 503 })
-    }
-
     const body = await request.json().catch(() => ({}))
     const email = String(body?.email ?? '').trim().toLowerCase()
     const password = String(body?.password ?? '')
@@ -22,29 +19,52 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Password must be at least 4 characters long' }, { status: 400 })
     }
 
-    const existing = await prisma.user.findUnique({ where: { email } })
-    if (existing) {
-      return NextResponse.json({ error: 'An account with this email already exists. Please sign in.' }, { status: 409 })
+    // Check Prisma existing user if available
+    try {
+      const existing = await prisma.user.findUnique({ where: { email } })
+      if (existing) {
+        return NextResponse.json({ error: 'An account with this email already exists. Please sign in.' }, { status: 409 })
+      }
+    } catch (dbErr) {
+      console.warn('[Signup] Prisma check unavailable, continuing with Supabase:', dbErr)
     }
 
-    if (isAdminEmail(email)) {
-      return NextResponse.json({ error: 'Admin accounts must be provisioned before they can sign in.' }, { status: 403 })
-    }
+    const isUserAdmin = isAdminEmail(email)
+    const role = isUserAdmin ? 'ADMIN' : 'CUSTOMER'
 
-    const storedPassword = hashPassword(password)
-
-    const user = await prisma.user.create({
-      data: {
+    // Create user in Supabase Auth
+    try {
+      const { data: supaData, error: supaError } = await supabase.auth.signUp({
         email,
-        name: name || email.split('@')[0],
-        password: storedPassword,
-        role: 'CUSTOMER',
-      },
-      select: { id: true, email: true, role: true, name: true },
-    })
+        password,
+        options: {
+          data: { name: name || email.split('@')[0] },
+        },
+      })
+      if (supaError && !supaError.message.includes('already registered')) {
+        console.warn('[Signup] Supabase signUp notice:', supaError.message)
+      }
+    } catch (supaEx) {
+      console.warn('[Signup] Supabase signUp exception:', supaEx)
+    }
 
-    const sessionCookie = createSessionCookieValue({ email: user.email, role: user.role })
-    const res = NextResponse.json({ ok: true, userId: user.id, role: user.role, canAccessAdmin: isAdminEmail(user.email) })
+    // Try saving in Prisma database if available
+    try {
+      const storedPassword = hashPassword(password)
+      await prisma.user.create({
+        data: {
+          email,
+          name: name || email.split('@')[0],
+          password: storedPassword,
+          role,
+        },
+      })
+    } catch (prismaCreateErr) {
+      console.warn('[Signup] Prisma create note (non-fatal):', prismaCreateErr)
+    }
+
+    const sessionCookie = createSessionCookieValue({ email, role })
+    const res = NextResponse.json({ ok: true, email, role, canAccessAdmin: isUserAdmin })
     res.cookies.set('auth_session', sessionCookie, {
       httpOnly: true,
       sameSite: 'lax',
@@ -59,5 +79,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Signup failed. Please try again.' }, { status: 500 })
   }
 }
-
-

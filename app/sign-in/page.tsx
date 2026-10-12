@@ -39,6 +39,7 @@ function SignInContent() {
       }
 
       router.push(data?.canAccessAdmin ? '/admin' : redirectTarget)
+      router.refresh()
     } catch (e: any) {
       setError(e?.message ?? 'Login failed. Please try again.')
     } finally {
@@ -171,11 +172,23 @@ function SignInContent() {
           </button>
         </form>
 
-        <div className="mt-6 text-center text-sm">
-          <span className="text-stone-600">No account?</span>{' '}
-          <Link href="/sign-up" className="font-semibold text-amber-700 hover:underline">
-            Create an account
-          </Link>
+        <div className="mt-6 flex flex-col items-center gap-3 border-t border-stone-100 pt-5 text-center text-sm">
+          <div>
+            <span className="text-stone-600">No account?</span>{' '}
+            <Link href="/sign-up" className="font-semibold text-amber-700 hover:underline">
+              Create an account
+            </Link>
+          </div>
+
+          <div className="pt-2 text-xs">
+            <Link
+              href="/admin-access"
+              className="inline-flex items-center gap-1.5 text-amber-800 hover:text-amber-950 font-bold bg-amber-50 hover:bg-amber-100 px-3 py-1.5 rounded-xl border border-amber-200 transition-colors"
+            >
+              <span>🔐</span>
+              <span>Bakery Admin Passcode Station</span>
+            </Link>
+          </div>
         </div>
       </div>
     </main>

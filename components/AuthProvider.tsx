@@ -48,37 +48,64 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
-    const supabase = getSupabaseBrowserClient()
-
-    // 1. Fetch initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setUser(session?.user ?? null)
+    let supabase: any = null
+    try {
+      supabase = getSupabaseBrowserClient()
+    } catch (err) {
+      console.warn('[AuthProvider] Failed to obtain client:', err)
       setLoading(false)
-      if (session?.user) {
-        syncServerSession(session)
-      }
-    })
+      return
+    }
 
-    // 2. Listen to auth state changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setSession(session)
-      setUser(session?.user ?? null)
+    if (!supabase?.auth) {
       setLoading(false)
+      return
+    }
 
-      if (event === 'SIGNED_IN' && session?.user) {
-        syncServerSession(session)
-      } else if (event === 'SIGNED_OUT') {
-        try {
-          await fetch('/api/auth/logout', { method: 'POST' })
-        } catch {}
-      }
-    })
+    // 1. Fetch initial session safely
+    try {
+      supabase.auth.getSession().then(({ data }: any) => {
+        const session = data?.session ?? null
+        setSession(session)
+        setUser(session?.user ?? null)
+        setLoading(false)
+        if (session?.user) {
+          syncServerSession(session)
+        }
+      }).catch((err: any) => {
+        console.warn('[AuthProvider] Initial session fetch warning:', err)
+        setLoading(false)
+      })
+    } catch (err) {
+      console.warn('[AuthProvider] Session execution warning:', err)
+      setLoading(false)
+    }
+
+    // 2. Listen to auth state changes safely
+    let subscription: { unsubscribe: () => void } | undefined
+    try {
+      const authRes = supabase.auth.onAuthStateChange(async (event: string, session: Session | null) => {
+        setSession(session)
+        setUser(session?.user ?? null)
+        setLoading(false)
+
+        if (event === 'SIGNED_IN' && session?.user) {
+          syncServerSession(session)
+        } else if (event === 'SIGNED_OUT') {
+          try {
+            await fetch('/api/auth/logout', { method: 'POST' })
+          } catch {}
+        }
+      })
+      subscription = authRes?.data?.subscription
+    } catch (err) {
+      console.warn('[AuthProvider] Auth listener registration warning:', err)
+    }
 
     return () => {
-      subscription.unsubscribe()
+      try {
+        subscription?.unsubscribe()
+      } catch {}
     }
   }, [])
 
@@ -89,55 +116,69 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const signInWithGoogle = async (redirectTo?: string) => {
-    const supabase = getSupabaseBrowserClient()
-    const callback = getCallbackUrl(redirectTo)
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: callback,
-        queryParams: {
-          access_type: 'offline',
-          prompt: 'consent',
+    try {
+      const supabase = getSupabaseBrowserClient()
+      const callback = getCallbackUrl(redirectTo)
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: callback,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
         },
-      },
-    })
-    return { error }
+      })
+      return { error }
+    } catch (err: any) {
+      return { error: err }
+    }
   }
 
   const signInWithPassword = async (email: string, password: string) => {
-    const supabase = getSupabaseBrowserClient()
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-    if (!error && data.user) {
-      await syncServerSession(data.session)
+    try {
+      const supabase = getSupabaseBrowserClient()
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+      if (!error && data?.user) {
+        await syncServerSession(data.session)
+      }
+      return { data, error }
+    } catch (err: any) {
+      return { data: null, error: err }
     }
-    return { data, error }
   }
 
   const signUpWithPassword = async (email: string, password: string, name?: string, redirectTo?: string) => {
-    const supabase = getSupabaseBrowserClient()
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: getCallbackUrl(redirectTo),
-        data: {
-          full_name: name || '',
-          name: name || '',
+    try {
+      const supabase = getSupabaseBrowserClient()
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: getCallbackUrl(redirectTo),
+          data: {
+            full_name: name || '',
+            name: name || '',
+          },
         },
-      },
-    })
-    if (!error && data.session) {
-      await syncServerSession(data.session)
+      })
+      if (!error && data?.session) {
+        await syncServerSession(data.session)
+      }
+      return { data, error }
+    } catch (err: any) {
+      return { data: null, error: err }
     }
-    return { data, error }
   }
 
   const signOut = async () => {
-    const supabase = getSupabaseBrowserClient()
-    await supabase.auth.signOut()
+    try {
+      const supabase = getSupabaseBrowserClient()
+      await supabase.auth.signOut()
+    } catch {}
     try {
       await fetch('/api/auth/logout', { method: 'POST' })
     } catch {}

@@ -26,15 +26,24 @@ function readEnvKey(key: string): string {
 
 // 1. Sanitize and resolve Project URL
 let resolvedUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/['"\r\n\s]/g, '').trim()
-if (!resolvedUrl || (!resolvedUrl.startsWith('http://') && !resolvedUrl.startsWith('https://'))) {
-  const fromFile = readEnvKey('NEXT_PUBLIC_SUPABASE_URL')
-  if (fromFile && (fromFile.startsWith('http://') || fromFile.startsWith('https://'))) {
-    resolvedUrl = fromFile.replace(/\/+$/, '')
+if (!resolvedUrl || resolvedUrl === 'undefined' || resolvedUrl === 'null') {
+  resolvedUrl = readEnvKey('NEXT_PUBLIC_SUPABASE_URL') || DEFAULT_URL
+}
+if (!resolvedUrl.startsWith('http://') && !resolvedUrl.startsWith('https://')) {
+  if (resolvedUrl.includes('.')) {
+    resolvedUrl = `https://${resolvedUrl}`
   } else {
     resolvedUrl = DEFAULT_URL
   }
-} else {
-  resolvedUrl = resolvedUrl.replace(/\/+$/, '')
+}
+resolvedUrl = resolvedUrl.replace(/\/+$/, '')
+try {
+  const parsed = new URL(resolvedUrl)
+  if (!parsed.protocol.startsWith('http')) {
+    resolvedUrl = DEFAULT_URL
+  }
+} catch {
+  resolvedUrl = DEFAULT_URL
 }
 
 export const supabaseUrl = resolvedUrl
