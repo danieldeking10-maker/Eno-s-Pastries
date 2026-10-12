@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Printer, X, QrCode } from 'lucide-react'
+import { Printer, X, QrCode, PackageCheck, Truck, RotateCcw } from 'lucide-react'
 
 type OrderStatus = 'PENDING' | 'CONFIRMED' | 'PREPARING' | 'READY' | 'DELIVERED' | 'CANCELLED'
 
@@ -201,6 +201,39 @@ export default function AdminOrdersPage() {
                         <Printer className="w-4 h-4 text-amber-700" />
                         <span>Print Receipt</span>
                       </button>
+
+                      {/* Quick Action Buttons */}
+                      <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                        <button
+                          type="button"
+                          disabled={order.status === 'READY' || order.status === 'DELIVERED' || order.status === 'CANCELLED'}
+                          onClick={() => handleStatusChange(order.id, 'READY')}
+                          className="flex-1 sm:flex-none py-2 px-3 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-medium rounded-lg text-sm transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          <PackageCheck className="w-4 h-4" />
+                          <span>Mark Ready</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={order.status === 'DELIVERED' || order.status === 'CANCELLED'}
+                          onClick={() => handleStatusChange(order.id, 'DELIVERED')}
+                          className="flex-1 sm:flex-none py-2 px-3 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-medium rounded-lg text-sm transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          <Truck className="w-4 h-4" />
+                          <span>Mark Delivered</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={order.status === 'CANCELLED' || order.status === 'DELIVERED'}
+                          onClick={() => handleStatusChange(order.id, 'CANCELLED')}
+                          className="flex-1 sm:flex-none py-2 px-3 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-medium rounded-lg text-sm transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          <X className="w-4 h-4" />
+                          <span>Cancel</span>
+                        </button>
+                      </div>
 
                       <div className="flex flex-col items-end gap-2">
                         <span className={`text-xs font-medium ${isPaid ? 'text-green-700' : 'text-amber-700'}`}>
