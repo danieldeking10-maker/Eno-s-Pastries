@@ -135,20 +135,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Order total must be greater than zero' }, { status: 400 })
     }
 
-<<<<<<< HEAD
-    const normalizedOrderType = String(orderType ?? '').toUpperCase() === 'WHOLESALE' ? 'WHOLESALE' : 'RETAIL'
-    const normalizedDeliveryType = String(deliveryType ?? '').toUpperCase() === 'DELIVERY' ? 'DELIVERY' : 'PICKUP'
-    let parsedDeliveryDate: Date | null = null
-    if (deliveryDate) {
-      const d = new Date(deliveryDate)
-      if (!Number.isNaN(d.getTime())) {
-        parsedDeliveryDate = d
-      }
-    }
-
-    const order = await prisma.order.create({
-      data: {
-=======
     const initialReference = `order_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`
     let order: any = null
     try {
@@ -188,13 +174,12 @@ export async function POST(request: Request) {
     } else {
       orderWithReference = {
         id: fallbackOrderId,
->>>>>>> fa1e5daf740243493ffb201daae84fd8baadd0fd
         totalAmount: calculatedTotal,
         status: 'PENDING',
-        orderType: normalizedOrderType,
-        deliveryType: normalizedDeliveryType,
+        orderType: orderType ?? 'RETAIL',
+        deliveryType: deliveryType ?? 'PICKUP',
         deliveryAddress: deliveryAddress ?? null,
-        deliveryDate: parsedDeliveryDate,
+        deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
         customerName: customerName || 'Valued Customer',
         customerEmail,
         customerPhone: customerPhone || '',
@@ -215,10 +200,12 @@ export async function POST(request: Request) {
     const origin = getAppOrigin(request)
 
     if (!PAYSTACK_SECRET_KEY) {
-      await prisma.order.update({
-        where: { id: order.id },
-        data: { status: 'CANCELLED' },
-      })
+      if (order) {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { status: 'CANCELLED' },
+        })
+      }
       return NextResponse.json(
         { error: 'Payments are temporarily unavailable. Please try again later.' },
         { status: 503 }
@@ -232,7 +219,7 @@ export async function POST(request: Request) {
       amount: amountPesewas,
       reference,
       metadata: {
-        orderId: order.id,
+        orderId: order?.id || fallbackOrderId,
         customerName,
         customerPhone,
       },
@@ -257,10 +244,12 @@ export async function POST(request: Request) {
       const paystackErrMsg = data?.message || 'Failed to initialize Paystack transaction'
       const isInvalidKey = paystackErrMsg.toLowerCase().includes('invalid key') || res.status === 401 || res.status === 403
 
-      await prisma.order.update({
-        where: { id: order.id },
-        data: { status: 'CANCELLED' },
-      })
+      if (order) {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { status: 'CANCELLED' },
+        })
+      }
 
       return NextResponse.json(
         { error: isInvalidKey ? 'Payment configuration is invalid. Please contact support.' : paystackErrMsg },
@@ -270,10 +259,12 @@ export async function POST(request: Request) {
 
     const authorizationUrl = data?.data?.authorization_url
     if (typeof authorizationUrl !== 'string' || !authorizationUrl) {
-      await prisma.order.update({
-        where: { id: order.id },
-        data: { status: 'CANCELLED' },
-      })
+      if (order) {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { status: 'CANCELLED' },
+        })
+      }
       return NextResponse.json(
         { error: 'Paystack did not return a payment link. Please try again.' },
         { status: 502 }
@@ -283,7 +274,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       authorizationUrl,
       reference,
-      orderId: order.id,
+      orderId: order?.id || fallbackOrderId,
     })
   } catch (error) {
     console.error('Paystack initialize failed:', error)

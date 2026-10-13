@@ -48,13 +48,6 @@ export async function POST(request: Request) {
       }
     }
 
-<<<<<<< HEAD
-    const isAdmin = isAdminEmail(user.email)
-    const role = isAdmin ? 'ADMIN' : (user.role || 'CUSTOMER')
-
-    const sessionCookie = createSessionCookieValue({ email, role })
-    const res = NextResponse.json({ ok: true, role, isAdmin, canAccessAdmin: isAdmin })
-=======
     if (!authenticated) {
       return NextResponse.json(
         { error: 'Invalid email or password. Please check credentials or sign up.' },
@@ -65,7 +58,6 @@ export async function POST(request: Request) {
     const sessionCookie = createSessionCookieValue({ email, role })
     const res = NextResponse.json({ ok: true, role, canAccessAdmin: isUserAdmin })
 
->>>>>>> fa1e5daf740243493ffb201daae84fd8baadd0fd
     res.cookies.set('auth_session', sessionCookie, {
       httpOnly: true,
       sameSite: 'lax',
@@ -73,10 +65,6 @@ export async function POST(request: Request) {
       secure: process.env.NODE_ENV === 'production',
       maxAge: 8 * 60 * 60,
     })
-<<<<<<< HEAD
-    if (isAdmin) {
-      res.cookies.set('admin_session', sessionCookie, {
-=======
 
     // If admin user, also provision admin_session cookie
     if (isUserAdmin) {
@@ -90,7 +78,6 @@ export async function POST(request: Request) {
       ).toString('base64url')
       const adminSignature = crypto.createHmac('sha256', adminSecret).update(encodedPayload).digest('hex')
       res.cookies.set('admin_session', `${encodedPayload}.${adminSignature}`, {
->>>>>>> fa1e5daf740243493ffb201daae84fd8baadd0fd
         httpOnly: true,
         sameSite: 'lax',
         path: '/',
@@ -98,10 +85,7 @@ export async function POST(request: Request) {
         maxAge: 8 * 60 * 60,
       })
     }
-<<<<<<< HEAD
-=======
 
->>>>>>> fa1e5daf740243493ffb201daae84fd8baadd0fd
     return res
   } catch (e) {
     console.error('Login error:', e)

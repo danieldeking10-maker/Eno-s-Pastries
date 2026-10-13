@@ -42,13 +42,8 @@ export async function POST(request: Request) {
       console.warn('[Auth Sync] Note: DB upsert skipped or non-fatal:', dbErr)
     }
 
-<<<<<<< HEAD
-    const sessionCookie = createVerifiedAuthSessionCookieValue(email)
-    const res = NextResponse.json({ ok: true, role, email, isAdmin, canAccessAdmin: isAdmin })
-=======
     const sessionCookie = createSessionCookieValue({ email, role })
     const res = NextResponse.json({ ok: true, role, email, canAccessAdmin: isAdmin })
->>>>>>> fa1e5daf740243493ffb201daae84fd8baadd0fd
     res.cookies.set('auth_session', sessionCookie, {
       httpOnly: true,
       sameSite: 'lax',

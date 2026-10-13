@@ -18,26 +18,13 @@ const DEFAULT_AUTH_SECRET = 'enos-pastries-secure-auth-secret-key-32chars-min-20
 const DEFAULT_ADMIN_SECRET = 'enos-pastries-admin-session-secret-key-32chars-min-2026'
 
 function getAuthSecret() {
-<<<<<<< HEAD
-  const secret = process.env.AUTH_SECRET || process.env.ADMIN_SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-  return secret.length >= 32 ? secret : null
-=======
   const secret = process.env.AUTH_SECRET || ''
   return secret.length >= 32 ? secret : DEFAULT_AUTH_SECRET
->>>>>>> fa1e5daf740243493ffb201daae84fd8baadd0fd
 }
 
 export function getAdminSecret() {
-<<<<<<< HEAD
-  const secret = process.env.ADMIN_SESSION_SECRET || process.env.AUTH_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-=======
   const secret = process.env.ADMIN_SESSION_SECRET || ''
-<<<<<<< HEAD
->>>>>>> ddd2b30eb1dd5314a3b94a8ac7755345fd87cb21
-  return secret.length >= 32 ? secret : null
-=======
   return secret.length >= 32 ? secret : DEFAULT_ADMIN_SECRET
->>>>>>> fa1e5daf740243493ffb201daae84fd8baadd0fd
 }
 
 export function hasAuthSecret() {

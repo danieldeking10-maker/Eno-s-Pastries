@@ -55,23 +55,6 @@ export async function POST(request: Request) {
   }
 
   try {
-<<<<<<< HEAD
-    const response = NextResponse.json({ ok: true }, { headers: { 'Cache-Control': 'no-store' } })
-<<<<<<< HEAD
-    const adminCookieValue = createSessionCookieValue({ email: signedInUser.email, role: 'ADMIN' })
-    response.cookies.set('auth_session', adminCookieValue, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      path: '/',
-      maxAge: 8 * 60 * 60,
-    })
-    response.cookies.set('admin_session', adminCookieValue, {
-=======
-    
-    // Set auth_session with ADMIN role
-    const authSessionCookie = createSessionCookieValue({ email: signedInUser.email, role: 'ADMIN' })
-=======
     const response = NextResponse.json(
       { ok: true, email: targetAdminEmail, role: 'ADMIN' },
       { headers: { 'Cache-Control': 'no-store' } }
@@ -79,9 +62,7 @@ export async function POST(request: Request) {
 
     // Set auth_session cookie with role: 'ADMIN'
     const authSessionCookie = createSessionCookieValue({ email: targetAdminEmail, role: 'ADMIN' })
->>>>>>> fa1e5daf740243493ffb201daae84fd8baadd0fd
     response.cookies.set('auth_session', authSessionCookie, {
->>>>>>> ddd2b30eb1dd5314a3b94a8ac7755345fd87cb21
       httpOnly: true,
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',

@@ -7,15 +7,7 @@ import { useCart } from '@/components/CartProvider'
 export default function Header() {
   const { cartCount } = useCart()
   const [isScrolled, setIsScrolled] = useState(false)
-<<<<<<< HEAD
-  const [authState, setAuthState] = useState<{
-    signedIn: boolean
-    email: string | null
-    isAdmin: boolean
-  } | null>(null)
-=======
   const [authData, setAuthData] = useState<{ signedIn: boolean; canAccessAdmin: boolean; email: string | null } | null>(null)
->>>>>>> fa1e5daf740243493ffb201daae84fd8baadd0fd
 
   useEffect(() => {
     const handleScroll = () => {
@@ -28,19 +20,6 @@ export default function Header() {
       try {
         const res = await fetch('/api/auth/session', { cache: 'no-store' })
         const data = await res.json().catch(() => ({}))
-<<<<<<< HEAD
-        if (data?.signedIn) {
-          setAuthState({
-            signedIn: true,
-            email: data.email || null,
-            isAdmin: Boolean(data.isAdmin || data.canAccessAdmin),
-          })
-        } else {
-          setAuthState({ signedIn: false, email: null, isAdmin: false })
-        }
-      } catch {
-        setAuthState({ signedIn: false, email: null, isAdmin: false })
-=======
         setAuthData({
           signedIn: data?.signedIn === true || data?.authenticated === true,
           canAccessAdmin: data?.canAccessAdmin === true,
@@ -48,7 +27,6 @@ export default function Header() {
         })
       } catch {
         setAuthData({ signedIn: false, canAccessAdmin: false, email: null })
->>>>>>> fa1e5daf740243493ffb201daae84fd8baadd0fd
       }
     }
     checkAuth()
@@ -58,11 +36,7 @@ export default function Header() {
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined)
-<<<<<<< HEAD
-    setAuthState({ signedIn: false, email: null, isAdmin: false })
-=======
     setAuthData({ signedIn: false, canAccessAdmin: false, email: null })
->>>>>>> fa1e5daf740243493ffb201daae84fd8baadd0fd
     window.location.href = '/'
   }
 
@@ -91,23 +65,6 @@ export default function Header() {
                 <span className="bg-amber-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">{cartCount}</span>
               )}
             </Link>
-<<<<<<< HEAD
-            {authState === null ? (
-              <span className="text-stone-400 text-sm">Loading...</span>
-            ) : authState.signedIn ? (
-              <div className="flex items-center gap-4">
-                {authState.isAdmin && (
-                  <Link href="/admin" className="text-stone-700 hover:text-amber-700 font-semibold transition-colors duration-300 flex items-center gap-1 bg-amber-100 hover:bg-amber-200 border border-amber-300 px-3 py-1.5 rounded-full text-sm">
-                    🔐 Admin Panel
-                  </Link>
-                )}
-                <span className="text-stone-700 font-medium text-sm flex items-center gap-1 bg-amber-50 px-3 py-1.5 rounded-full border border-amber-200">
-                  👤 {authState.email ? authState.email.split('@')[0] : 'Account'}
-                </span>
-                <button
-                  onClick={handleLogout}
-                  className="text-stone-700 hover:text-amber-700 font-medium transition-colors duration-300 flex items-center gap-1 cursor-pointer"
-=======
             {authData === null ? (
               <span className="text-stone-400 text-sm">Loading...</span>
             ) : authData.signedIn ? (
@@ -120,11 +77,10 @@ export default function Header() {
                 <button
                   onClick={handleLogout}
                   className="text-stone-700 hover:text-red-700 font-medium transition-colors duration-300 flex items-center gap-1 cursor-pointer"
->>>>>>> fa1e5daf740243493ffb201daae84fd8baadd0fd
                 >
                   🚪 Logout
                 </button>
-              </div>
+              </>
             ) : (
               <Link href="/sign-in" className="text-stone-700 hover:text-amber-700 font-medium transition-colors duration-300 flex items-center gap-1">
                 👤 Sign In
@@ -135,15 +91,9 @@ export default function Header() {
             <Link href="/cart" className="bg-gradient-to-r from-amber-600 to-orange-600 text-white px-4 py-2 rounded-full font-medium shadow-lg">
               Order Now
             </Link>
-<<<<<<< HEAD
-            {authState?.signedIn ? (
-              <div className="flex items-center gap-2">
-                {authState.isAdmin && (
-=======
             {authData?.signedIn ? (
               <>
                 {authData.canAccessAdmin && (
->>>>>>> fa1e5daf740243493ffb201daae84fd8baadd0fd
                   <Link href="/admin" className="bg-amber-100 hover:bg-amber-200 text-amber-900 border-2 border-amber-300 px-3 py-1.5 rounded-full font-medium text-sm transition-all duration-300">
                     Admin
                   </Link>
@@ -154,7 +104,7 @@ export default function Header() {
                 >
                   Logout
                 </button>
-              </div>
+              </>
             ) : (
               <Link href="/sign-in" className="bg-gradient-to-r from-amber-600 to-orange-600 text-white px-4 py-2 rounded-full font-medium shadow-lg">
                 Sign In
