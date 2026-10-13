@@ -80,5 +80,5 @@ export async function recordVerifiedPayment(reference: string, orderId: string, 
   } catch (error) {
     console.warn('Supabase payment sync skipped:', error)
   }
-  return prismaUpdated || true
+  return prismaUpdated
 }

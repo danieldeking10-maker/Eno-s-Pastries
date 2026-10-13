@@ -135,11 +135,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Order total must be greater than zero' }, { status: 400 })
     }
 
-    const initialReference = `order_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`
+    const fallbackOrderId = crypto.randomUUID()
+    const reference = `order_${fallbackOrderId}_${crypto.randomBytes(4).toString('hex')}`
+
     let order: any = null
     try {
       order = await prisma.order.create({
         data: {
+          id: fallbackOrderId,
           totalAmount: calculatedTotal,
           status: 'PENDING',
           orderType: orderType ?? 'RETAIL',
@@ -150,7 +153,7 @@ export async function POST(request: Request) {
           customerEmail,
           customerPhone: customerPhone || '',
           customerNote: customerNote || null,
-          paystackReference: initialReference,
+          paystackReference: reference,
           items: {
             create: itemsToCreate,
           },
@@ -161,33 +164,21 @@ export async function POST(request: Request) {
       console.warn('[Paystack Init] Prisma create notice, using Supabase direct:', createErr)
     }
 
-    const fallbackOrderId = order?.id || crypto.randomUUID()
-    const reference = `order_${fallbackOrderId}_${crypto.randomBytes(4).toString('hex')}`
-
-    let orderWithReference = order
-    if (order) {
-      orderWithReference = await prisma.order.update({
-        where: { id: order.id },
-        data: { paystackReference: reference },
-        include: { items: true },
-      }).catch(() => order)
-    } else {
-      orderWithReference = {
-        id: fallbackOrderId,
-        totalAmount: calculatedTotal,
-        status: 'PENDING',
-        orderType: orderType ?? 'RETAIL',
-        deliveryType: deliveryType ?? 'PICKUP',
-        deliveryAddress: deliveryAddress ?? null,
-        deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
-        customerName: customerName || 'Valued Customer',
-        customerEmail,
-        customerPhone: customerPhone || '',
-        customerNote: customerNote || null,
-        paystackReference: reference,
-        createdAt: new Date(),
-        items: itemsToCreate,
-      }
+    const orderWithReference = order || {
+      id: fallbackOrderId,
+      totalAmount: calculatedTotal,
+      status: 'PENDING',
+      orderType: orderType ?? 'RETAIL',
+      deliveryType: deliveryType ?? 'PICKUP',
+      deliveryAddress: deliveryAddress ?? null,
+      deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
+      customerName: customerName || 'Valued Customer',
+      customerEmail,
+      customerPhone: customerPhone || '',
+      customerNote: customerNote || null,
+      paystackReference: reference,
+      createdAt: new Date(),
+      items: itemsToCreate,
     }
 
     try {

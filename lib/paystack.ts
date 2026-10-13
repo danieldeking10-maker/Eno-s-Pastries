@@ -39,7 +39,7 @@ export function toMinorUnit(amount: number): number {
 }
 
 /**
- * Verify Paystack webhook HMAC-SHA512 signature.
+ * Verify Paystack webhook HMAC-SHA512 signature using a timing-safe comparison.
  */
 export function verifyPaystackSignature(
   rawBody: string,
@@ -48,11 +48,14 @@ export function verifyPaystackSignature(
 ): boolean {
   if (!signature || !secretKey || !rawBody) return false
   try {
-    const hash = crypto
+    const expected = crypto
       .createHmac('sha512', secretKey)
       .update(rawBody)
       .digest('hex')
-    return hash.toLowerCase() === signature.toLowerCase()
+    const expectedBuffer = Buffer.from(expected)
+    const signatureBuffer = Buffer.from(signature)
+    if (expectedBuffer.length !== signatureBuffer.length) return false
+    return crypto.timingSafeEqual(expectedBuffer, signatureBuffer)
   } catch (err) {
     console.error('Signature verification error:', err)
     return false

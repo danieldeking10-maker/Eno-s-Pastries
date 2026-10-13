@@ -1,21 +1,19 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import crypto from 'crypto'
 import { getPaystackSecretKey, recordVerifiedPayment, transactionMatchesOrder, verifyPaystackTransaction } from '@/lib/paystack-payment'
+import { verifyPaystackSignature } from '@/lib/paystack'
 
 export async function POST(request: Request) {
   try {
     const rawBody = await request.text()
-    const signature = request.headers.get('x-paystack-signature') || ''
+    const signature = request.headers.get('x-paystack-signature')
     const secret = getPaystackSecretKey()
 
     if (!secret) {
       return NextResponse.json({ error: 'Missing PAYSTACK_SECRET_KEY' }, { status: 500 })
     }
 
-    const expectedSignature = crypto.createHmac('sha512', secret).update(rawBody).digest('hex')
-    if (!signature || signature.length !== expectedSignature.length ||
-      !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
+    if (!verifyPaystackSignature(rawBody, signature, secret)) {
       return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 401 })
     }
 

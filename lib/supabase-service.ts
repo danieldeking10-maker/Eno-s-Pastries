@@ -904,6 +904,7 @@ export async function syncOrderPaymentToSupabase(orderId: string, paymentDetails
   paymentCurrency: string
   paidAt: Date
 }) {
+  if (!hasServiceRole()) return
   const client = getSupabaseClient()
   const nowIso = new Date().toISOString()
 
@@ -979,20 +980,6 @@ export async function getOrderByReferenceFromSupabase(reference: string): Promis
     return formatSupabaseOrder(order)
   } catch {
     return null
-  }
-}
-
-export async function updateOrderStatusInSupabase(id: string, status: string): Promise<boolean> {
-  try {
-    const client = getSupabaseClient()
-    const { error } = await withTimeout(
-      client.from('orders').update({ status, updatedat: new Date().toISOString() }).eq('id', id),
-      4000
-    )
-    return !error
-  } catch (err) {
-    console.warn('[Supabase updateOrderStatus warning]:', err)
-    return false
   }
 }
 
