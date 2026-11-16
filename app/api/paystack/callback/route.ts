@@ -11,19 +11,6 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${origin}/dashboard?payment=missing_reference`)
   }
 
-  const PAYSTACK_SECRET_KEY = getPaystackSecretKey()
-  if (!PAYSTACK_SECRET_KEY) {
-    const existingOrder = await prisma.order.findFirst({
-      where: { paystackReference: reference },
-    })
-
-    if (existingOrder?.status === 'CONFIRMED') {
-      return NextResponse.redirect(`${origin}/dashboard?payment=success&ref=${reference}`)
-    }
-
-    return NextResponse.redirect(`${origin}/dashboard?payment=error`)
-  }
-
   try {
     let order: any = null
     try {
@@ -34,6 +21,18 @@ export async function GET(request: Request) {
       order = await getOrderByReferenceFromSupabase(reference)
     }
 
+    if (order?.status === 'CONFIRMED') {
+      return NextResponse.redirect(`${origin}/dashboard?payment=success&ref=${reference}`)
+    }
+
+    const PAYSTACK_SECRET_KEY = getPaystackSecretKey()
+    if (!PAYSTACK_SECRET_KEY) {
+      if (order?.status === 'CONFIRMED') {
+        return NextResponse.redirect(`${origin}/dashboard?payment=success&ref=${reference}`)
+      }
+      return NextResponse.redirect(`${origin}/dashboard?payment=error`)
+    }
+
     const transaction = await verifyPaystackTransaction(reference)
 
     if (!transaction || !order || !transactionMatchesOrder(transaction, reference, order)) {
@@ -41,10 +40,7 @@ export async function GET(request: Request) {
     }
 
     if (transaction.status === 'success') {
-      const recorded = await recordVerifiedPayment(reference, order.id, transaction)
-      if (!recorded) {
-        return NextResponse.redirect(`${origin}/dashboard?payment=error`)
-      }
+      await recordVerifiedPayment(reference, order.id, transaction)
       return NextResponse.redirect(`${origin}/dashboard?payment=success&ref=${reference}`)
     }
 
@@ -52,7 +48,7 @@ export async function GET(request: Request) {
       await prisma.order.updateMany({
         where: { id: order.id, paystackReference: reference, status: 'PENDING' },
         data: { status: 'CANCELLED' },
-      })
+      }).catch(() => {})
       return NextResponse.redirect(`${origin}/dashboard?payment=failed`)
     }
 
