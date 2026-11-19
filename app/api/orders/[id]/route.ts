@@ -114,6 +114,18 @@ export async function PUT(
       updated = await getOrderByIdFromSupabase(id)
     }
 
+    // Notify customer of order status update via Resend
+    if (updated && status !== order.status) {
+      try {
+        const { sendOrderStatusUpdateEmail } = await import('@/lib/email')
+        sendOrderStatusUpdateEmail(updated, status, body.customerNote || body.statusNote).catch((err) =>
+          console.warn('[Resend] Status update email dispatch error:', err)
+        )
+      } catch (emailErr) {
+        console.warn('[Resend] Status update notification error:', emailErr)
+      }
+    }
+
     return NextResponse.json(updated || { id, status, success: true })
   } catch (error) {
     console.error('Error updating order status:', error)

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Printer, X, QrCode, PackageCheck, Truck, RotateCcw } from 'lucide-react'
+import { Printer, X, QrCode, PackageCheck, Truck, RotateCcw, Mail, Check } from 'lucide-react'
 
 type OrderStatus = 'PENDING' | 'CONFIRMED' | 'PREPARING' | 'READY' | 'DELIVERED' | 'CANCELLED'
 
@@ -71,12 +71,43 @@ export default function AdminOrdersPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedPrintOrder, setSelectedPrintOrder] = useState<Order | null>(null)
+  const [sendingEmailId, setSendingEmailId] = useState<string | null>(null)
+  const [emailSuccessId, setEmailSuccessId] = useState<string | null>(null)
 
   const handlePrintOrder = (order: Order) => {
     setSelectedPrintOrder(order)
     setTimeout(() => {
       window.print()
     }, 150)
+  }
+
+  const handleSendEmail = async (order: Order) => {
+    if (!order.customerEmail) {
+      alert('This order has no customer email address.')
+      return
+    }
+    try {
+      setSendingEmailId(order.id)
+      const res = await fetch('/api/email/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'order_confirmation',
+          to: order.customerEmail,
+          orderId: order.id,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data?.error || 'Failed to send email via Resend')
+      }
+      setEmailSuccessId(order.id)
+      setTimeout(() => setEmailSuccessId(null), 3000)
+    } catch (err: any) {
+      alert(`Could not send email: ${err.message}`)
+    } finally {
+      setSendingEmailId(null)
+    }
   }
 
   useEffect(() => {
@@ -280,12 +311,33 @@ export default function AdminOrdersPage() {
                       ))}
                     </div>
                     <div className="flex justify-between items-center mt-4 pt-4 border-t">
-                      <button
-                        onClick={() => handlePrintOrder(order)}
-                        className="inline-flex items-center gap-1.5 text-amber-700 hover:text-amber-900 text-sm font-semibold transition-colors cursor-pointer"
-                      >
-                        <Printer className="w-4 h-4" /> Print Receipt
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => handlePrintOrder(order)}
+                          className="inline-flex items-center gap-1.5 text-amber-700 hover:text-amber-900 text-sm font-semibold transition-colors cursor-pointer"
+                        >
+                          <Printer className="w-4 h-4" /> Print Receipt
+                        </button>
+                        {order.customerEmail && (
+                          <button
+                            onClick={() => handleSendEmail(order)}
+                            disabled={sendingEmailId === order.id}
+                            className="inline-flex items-center gap-1.5 text-stone-600 hover:text-amber-700 text-sm font-medium transition-colors cursor-pointer disabled:opacity-50"
+                            title={`Send receipt email to ${order.customerEmail}`}
+                          >
+                            {emailSuccessId === order.id ? (
+                              <span className="inline-flex items-center gap-1 text-green-700">
+                                <Check className="w-4 h-4" /> Sent!
+                              </span>
+                            ) : (
+                              <>
+                                <Mail className="w-4 h-4" />
+                                {sendingEmailId === order.id ? 'Sending...' : 'Email Receipt'}
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </div>
                       <span className="text-xl font-bold text-amber-700">
                         Total: GH₵{Number(order.totalAmount || 0).toFixed(2)}
                       </span>

@@ -122,5 +122,35 @@ export async function recordVerifiedPayment(reference: string, orderId: string, 
   } catch (error) {
     console.warn('Supabase payment sync skipped:', error)
   }
+
+  // Trigger customer payment receipt & admin notification via Resend
+  try {
+    const { sendPaymentReceiptEmail, sendAdminOrderNotification } = await import('@/lib/email')
+    let fullOrder: any = null
+    try {
+      fullOrder = await prisma.order.findUnique({
+        where: { id: orderId },
+        include: { items: { include: { product: true } } },
+      })
+    } catch {}
+
+    if (!fullOrder) {
+      const { getOrderByIdFromSupabase } = await import('@/lib/supabase-service')
+      fullOrder = await getOrderByIdFromSupabase(orderId)
+    }
+
+    if (fullOrder) {
+      fullOrder.paidAt = paidAt
+      sendPaymentReceiptEmail(fullOrder, transaction).catch((err) =>
+        console.warn('[Resend] Payment receipt email failed:', err)
+      )
+      sendAdminOrderNotification(fullOrder).catch((err) =>
+        console.warn('[Resend] Admin payment alert failed:', err)
+      )
+    }
+  } catch (emailErr) {
+    console.warn('[Resend] Payment notification dispatch error:', emailErr)
+  }
+
   return prismaUpdated
 }

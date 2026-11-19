@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { saveOrderToSupabase, getProducts, getOrdersFromSupabase } from '@/lib/supabase-service';
 import { hasAdminSession } from '@/lib/auth';
+import { sendOrderConfirmationEmail, sendAdminOrderNotification } from '@/lib/email';
 import crypto from 'crypto';
 
 export async function GET(request: Request) {
@@ -185,6 +186,18 @@ export async function POST(request: Request) {
       } catch (e) {
         console.warn('Supabase order mirror error:', e);
       }
+    }
+
+    // Trigger transactional emails via Resend
+    try {
+      sendOrderConfirmationEmail(order).catch((err) =>
+        console.warn('[Resend] Customer order confirmation failed:', err)
+      )
+      sendAdminOrderNotification(order).catch((err) =>
+        console.warn('[Resend] Admin order alert failed:', err)
+      )
+    } catch (emailErr) {
+      console.warn('[Resend] Order notification dispatch error:', emailErr)
     }
 
     return NextResponse.json(order, { status: 201 });
