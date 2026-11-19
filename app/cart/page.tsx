@@ -1,13 +1,23 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import Header from '@/components/Header'
 import { useCart } from '@/components/CartProvider'
 
 export default function CartPage() {
-  const { cart, removeFromCart, clearCart, cartTotal } = useCart()
+  const {
+    cart,
+    removeFromCart,
+    setItemQuantity,
+    clearCart,
+    cartCount,
+    rawSubtotal,
+    wholesaleDiscount,
+    isWholesale,
+    cartTotal,
+  } = useCart()
   const [showCheckout, setShowCheckout] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -22,6 +32,46 @@ export default function CartPage() {
     deliveryDate: '',
     customerNote: '',
   })
+
+  // Synchronize orderType with wholesale qualification (orders with >15 items)
+  useEffect(() => {
+    if (isWholesale) {
+      setCheckoutForm((prev) => ({ ...prev, orderType: 'Wholesale' }))
+    }
+  }, [isWholesale])
+
+  // Group items by product ID/name for intuitive cart management with quantity controls
+  const groupedItems = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        key: string
+        productId: string | null
+        name: string
+        imageUrl?: string
+        quantity: number
+        price: number
+      }
+    >()
+    for (const item of cart) {
+      if (!item || (!item.id && !item.name)) continue
+      const key = String(item.id || item.name)
+      const existing = map.get(key)
+      if (existing) {
+        existing.quantity += 1
+      } else {
+        map.set(key, {
+          key,
+          productId: item.id || null,
+          name: item.name,
+          imageUrl: item.imageUrl,
+          quantity: 1,
+          price: Number(item.price) || 0,
+        })
+      }
+    }
+    return Array.from(map.values())
+  }, [cart])
 
   // Pre-fill customer details from localStorage or user session if available
   useEffect(() => {
@@ -172,10 +222,10 @@ export default function CartPage() {
           <div className="space-y-6">
             {/* Cart Items List */}
             <div className="space-y-4 rounded-3xl border border-stone-200 bg-white p-4 shadow-sm sm:p-6">
-              {cart.map((item, index) => (
+              {groupedItems.map((item) => (
                 <div
-                  key={`${item.id ?? item.name}-${index}`}
-                  className="flex items-center justify-between gap-4 rounded-2xl border border-stone-100 bg-stone-50/50 p-4 transition hover:bg-stone-50"
+                  key={item.key}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-stone-100 bg-stone-50/50 p-4 transition hover:bg-stone-50"
                 >
                   <div className="flex items-center gap-4">
                     {item.imageUrl && (
@@ -192,25 +242,115 @@ export default function CartPage() {
                     <div>
                       <h3 className="font-bold text-stone-900">{item.name}</h3>
                       <p className="text-sm font-semibold text-amber-800">
-                        GH₵{Number(item.price || 0).toFixed(2)}
+                        GH₵{item.price.toFixed(2)} each
                       </p>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => removeFromCart(index)}
-                    className="rounded-full bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-600 transition hover:bg-red-100"
-                  >
-                    Remove
-                  </button>
+
+                  <div className="flex items-center justify-between sm:justify-end gap-4">
+                    {/* Quantity Selector */}
+                    <div className="flex items-center border border-stone-300 rounded-xl bg-white overflow-hidden shadow-xs">
+                      <button
+                        type="button"
+                        onClick={() => setItemQuantity(item.key, item.quantity - 1)}
+                        className="px-3 py-1 text-stone-600 hover:bg-stone-100 font-bold transition cursor-pointer"
+                        title="Decrease quantity"
+                      >
+                        -
+                      </button>
+                      <span className="px-3 py-1 font-semibold text-stone-800 text-sm min-w-8 text-center">
+                        {item.quantity}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setItemQuantity(item.key, item.quantity + 1)}
+                        className="px-3 py-1 text-stone-600 hover:bg-stone-100 font-bold transition cursor-pointer"
+                        title="Increase quantity"
+                      >
+                        +
+                      </button>
+                    </div>
+
+                    <div className="text-right min-w-24">
+                      <div className="font-bold text-stone-900">
+                        GH₵{(item.price * item.quantity).toFixed(2)}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setItemQuantity(item.key, 0)}
+                      className="rounded-full bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-100 cursor-pointer"
+                      title="Remove item"
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
 
+            {/* Wholesale Qualification Notice */}
+            {isWholesale ? (
+              <div className="rounded-2xl bg-emerald-50 border-2 border-emerald-500/30 p-4 text-emerald-900 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">🎉</span>
+                  <div>
+                    <div className="font-bold text-sm sm:text-base text-emerald-900">
+                      10% Wholesale Discount Applied!
+                    </div>
+                    <div className="text-xs sm:text-sm text-emerald-700">
+                      Your order has {cartCount} items (more than 15 items), unlocking our wholesale price with 10% off.
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs font-semibold uppercase text-emerald-600">Savings</div>
+                  <div className="text-base sm:text-lg font-bold text-emerald-800">
+                    -GH₵{wholesaleDiscount.toFixed(2)}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl bg-amber-50/80 border border-amber-200/80 p-4 text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs sm:text-sm">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-xl">💡</span>
+                  <span>
+                    <strong>Wholesale Pricing Offer:</strong> Order more than 15 items to get an automatic <strong>10% wholesale discount</strong> on your entire order!
+                  </span>
+                </div>
+                <span className="font-semibold text-amber-800 whitespace-nowrap bg-amber-100/70 px-3 py-1 rounded-full text-center">
+                  Add {16 - cartCount} more for 10% off
+                </span>
+              </div>
+            )}
+
             {/* Total & Checkout Section */}
             <div className="rounded-3xl border border-amber-200 bg-white p-6 shadow-xl sm:p-8">
+              <div className="space-y-2 border-b border-stone-200 pb-4 mb-6">
+                <div className="flex justify-between text-stone-600 text-sm sm:text-base">
+                  <span>Subtotal ({cartCount} {cartCount === 1 ? 'item' : 'items'})</span>
+                  <span>GH₵{rawSubtotal.toFixed(2)}</span>
+                </div>
+                {isWholesale && (
+                  <div className="flex justify-between text-emerald-700 font-semibold text-sm sm:text-base">
+                    <span className="flex items-center gap-1.5">
+                      🏷️ Wholesale Discount (10% off)
+                    </span>
+                    <span>-GH₵{wholesaleDiscount.toFixed(2)}</span>
+                  </div>
+                )}
+              </div>
+
               <div className="flex items-center justify-between mb-8">
-                <span className="text-2xl font-semibold text-stone-800">Total Amount</span>
+                <div>
+                  <span className="text-2xl font-semibold text-stone-800">Total Amount</span>
+                  {isWholesale && (
+                    <span className="block text-xs font-bold text-emerald-600 uppercase tracking-wider">
+                      Wholesale Price (10% Off)
+                    </span>
+                  )}
+                </div>
                 <span className="text-4xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent">
                   GH₵{cartTotal.toFixed(2)}
                 </span>
@@ -306,8 +446,12 @@ export default function CartPage() {
                         onChange={(e) => setCheckoutForm({ ...checkoutForm, orderType: e.target.value })}
                         className="w-full px-5 py-3.5 border-2 border-amber-200 rounded-xl focus:border-amber-600 focus:outline-none text-stone-900 bg-white transition"
                       >
-                        <option value="Retail">Retail</option>
-                        <option value="Wholesale">Wholesale</option>
+                        <option value="Retail">
+                          {isWholesale ? 'Retail (Wholesale 10% auto-applied for >15 items)' : 'Retail'}
+                        </option>
+                        <option value="Wholesale">
+                          Wholesale {isWholesale ? '(10% Discount Applied)' : '(10% discount on orders >15 items)'}
+                        </option>
                       </select>
                     </div>
 

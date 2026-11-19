@@ -5,10 +5,14 @@ import { Product } from './ProductCard';
 
 type CartContextType = {
   cart: Product[];
-  addToCart: (product: Product) => void;
+  addToCart: (product: Product, quantity?: number) => void;
   removeFromCart: (index: number) => void;
+  setItemQuantity: (productIdOrName: string, quantity: number) => void;
   clearCart: () => void;
   cartCount: number;
+  rawSubtotal: number;
+  wholesaleDiscount: number;
+  isWholesale: boolean;
   cartTotal: number;
   sessionId: string;
   isCloudSynced: boolean;
@@ -174,10 +178,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
     };
   }, [cart, isLoaded, sessionId]);
 
-  const addToCart = useCallback((product: Product) => {
+  const addToCart = useCallback((product: Product, quantity = 1) => {
     const normalizedProduct = normalizeCartItem(product);
     if (!normalizedProduct) return;
-    setCart((prev) => [...prev, normalizedProduct]);
+    const count = Math.max(1, Math.min(100, Math.floor(quantity)));
+    const newItems = Array(count).fill(normalizedProduct);
+    setCart((prev) => [...prev, ...newItems]);
   }, []);
 
   const removeFromCart = useCallback((index: number) => {
@@ -185,6 +191,22 @@ export function CartProvider({ children }: { children: ReactNode }) {
       const newCart = [...prev];
       newCart.splice(index, 1);
       return newCart;
+    });
+  }, []);
+
+  const setItemQuantity = useCallback((productIdOrName: string, quantity: number) => {
+    const targetKey = String(productIdOrName).toLowerCase().trim();
+    const qty = Math.max(0, Math.min(100, Math.floor(quantity)));
+    setCart((prev) => {
+      const otherItems = prev.filter((p) => {
+        const key = String(p.id || p.name).toLowerCase().trim();
+        return key !== targetKey;
+      });
+      if (qty <= 0) return otherItems;
+      const sampleItem = prev.find((p) => String(p.id || p.name).toLowerCase().trim() === targetKey);
+      if (!sampleItem) return prev;
+      const newItems = Array(qty).fill(sampleItem);
+      return [...otherItems, ...newItems];
     });
   }, []);
 
@@ -198,14 +220,50 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [sessionId]);
 
   const cartCount = useMemo(() => cart.length, [cart]);
-  const cartTotal = useMemo(
+  const rawSubtotal = useMemo(
     () => cart.reduce((sum, product) => sum + (Number(product?.price) || 0), 0),
     [cart],
   );
+  // Wholesale qualification: orders with more than 15 total quantity receive a 10% discount
+  const isWholesale = useMemo(() => cartCount > 15, [cartCount]);
+  const wholesaleDiscount = useMemo(
+    () => (isWholesale ? Math.round(rawSubtotal * 0.10 * 100) / 100 : 0),
+    [isWholesale, rawSubtotal],
+  );
+  const cartTotal = useMemo(
+    () => Math.max(0, Math.round((rawSubtotal - wholesaleDiscount) * 100) / 100),
+    [rawSubtotal, wholesaleDiscount],
+  );
 
   const value = useMemo(
-    () => ({ cart, addToCart, removeFromCart, clearCart, cartCount, cartTotal, sessionId, isCloudSynced }),
-    [cart, addToCart, removeFromCart, clearCart, cartCount, cartTotal, sessionId, isCloudSynced],
+    () => ({
+      cart,
+      addToCart,
+      removeFromCart,
+      setItemQuantity,
+      clearCart,
+      cartCount,
+      rawSubtotal,
+      wholesaleDiscount,
+      isWholesale,
+      cartTotal,
+      sessionId,
+      isCloudSynced,
+    }),
+    [
+      cart,
+      addToCart,
+      removeFromCart,
+      setItemQuantity,
+      clearCart,
+      cartCount,
+      rawSubtotal,
+      wholesaleDiscount,
+      isWholesale,
+      cartTotal,
+      sessionId,
+      isCloudSynced,
+    ],
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

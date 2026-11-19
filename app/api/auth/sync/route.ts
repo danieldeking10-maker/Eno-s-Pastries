@@ -42,6 +42,14 @@ export async function POST(request: Request) {
       console.warn('[Auth Sync] Note: DB upsert skipped or non-fatal:', dbErr)
     }
 
+    // Dispatch welcome email via Resend for newly synced customer
+    try {
+      const { sendWelcomeEmail } = await import('@/lib/email')
+      sendWelcomeEmail(email, name || email.split('@')[0]).catch((err) =>
+        console.warn('[Resend] OAuth welcome email skipped or failed:', err)
+      )
+    } catch {}
+
     const sessionCookie = createSessionCookieValue({ email, role })
     const res = NextResponse.json({ ok: true, role, email, canAccessAdmin: isAdmin })
     res.cookies.set('auth_session', sessionCookie, {

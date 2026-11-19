@@ -23,6 +23,8 @@ export type OrderEmailData = {
   deliveryAddress?: string | null
   deliveryDate?: string | Date | null
   totalAmount: number
+  subtotalAmount?: number
+  wholesaleDiscount?: number
   status?: string
   paystackReference?: string | null
   paystackTransactionId?: string | null
@@ -201,11 +203,19 @@ function getItemName(item: OrderItemDetail): string {
  */
 export function renderOrderConfirmationTemplate(order: OrderEmailData): { subject: string; html: string; text: string } {
   const shortId = order.id ? order.id.slice(0, 8).toUpperCase() : 'PENDING'
-  const subject = `Order Confirmation #${shortId} - Eno's Pastries`
   const customerName = order.customerName || 'Valued Customer'
   const isPaid = order.status === 'CONFIRMED' || Boolean(order.paidAt)
 
   const itemsList = order.items && order.items.length > 0 ? order.items : []
+  const totalQuantity = itemsList.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0)
+  const isWholesale = order.orderType === 'WHOLESALE' || totalQuantity > 15
+  const rawSubtotal = order.subtotalAmount || itemsList.reduce((sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 1), 0)
+  const wholesaleDiscount = order.wholesaleDiscount ?? (isWholesale && totalQuantity > 15 ? Math.round(rawSubtotal * 0.10 * 100) / 100 : 0)
+
+  const subject = isWholesale && totalQuantity > 15
+    ? `Order Confirmation #${shortId} (Wholesale 10% Off) - Eno's Pastries`
+    : `Order Confirmation #${shortId} - Eno's Pastries`
+
   const itemsHtml = itemsList
     .map((item) => {
       const name = getItemName(item)
@@ -292,6 +302,12 @@ export function renderOrderConfirmationTemplate(order: OrderEmailData): { subjec
                   <td style="padding: 6px 12px; font-size: 13px; color: #6B7280;">Fulfillment:</td>
                   <td style="padding: 6px 12px; font-size: 13px; font-weight: 600; color: #92400E;">${deliveryTypeLabel}</td>
                 </tr>
+                <tr>
+                  <td style="padding: 6px 12px; font-size: 13px; color: #6B7280;">Order Type:</td>
+                  <td style="padding: 6px 12px; font-size: 13px; font-weight: 700; color: ${isWholesale && totalQuantity > 15 ? '#047857' : '#1F2937'};">
+                    ${isWholesale && totalQuantity > 15 ? 'Wholesale (10% Discount Applied for >15 items)' : 'Retail'}
+                  </td>
+                </tr>
                 ${order.deliveryAddress ? `
                 <tr>
                   <td style="padding: 6px 12px; font-size: 13px; color: #6B7280;">Delivery Address:</td>
@@ -311,6 +327,16 @@ export function renderOrderConfirmationTemplate(order: OrderEmailData): { subjec
             </td>
           </tr>
 
+          ${isWholesale && totalQuantity > 15 ? `
+          <!-- Wholesale Discount Banner -->
+          <tr>
+            <td style="padding: 0 32px 12px;">
+              <div style="background-color: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 8px; padding: 12px 16px; font-size: 13px; color: #065F46;">
+                <strong>🎉 10% Wholesale Discount Applied!</strong> Because your order contains ${totalQuantity} items (more than 15 items), you received a 10% discount on your order (-${formatGHS(wholesaleDiscount)}).
+              </div>
+            </td>
+          </tr>` : ''}
+
           <!-- Items Table -->
           <tr>
             <td style="padding: 16px 32px;">
@@ -328,8 +354,18 @@ export function renderOrderConfirmationTemplate(order: OrderEmailData): { subjec
                   ${itemsHtml || '<tr><td colspan="4" style="padding: 16px; text-align: center; color: #6B7280;">Pastry selection</td></tr>'}
                 </tbody>
                 <tfoot>
+                  ${wholesaleDiscount > 0 ? `
+                  <tr style="background-color: #F9FAFB;">
+                    <td colspan="3" style="padding: 10px 16px; font-size: 14px; color: #4B5563; text-align: right;">Subtotal (${totalQuantity} items):</td>
+                    <td style="padding: 10px 16px; font-size: 14px; font-weight: 600; color: #1F2937; text-align: right;">${formatGHS(rawSubtotal)}</td>
+                  </tr>
+                  <tr style="background-color: #ECFDF5;">
+                    <td colspan="3" style="padding: 10px 16px; font-size: 14px; font-weight: 700; color: #065F46; text-align: right;">Wholesale Discount (10% off for >15 qty):</td>
+                    <td style="padding: 10px 16px; font-size: 14px; font-weight: 700; color: #059669; text-align: right;">-${formatGHS(wholesaleDiscount)}</td>
+                  </tr>
+                  ` : ''}
                   <tr style="background-color: #FFFBEB;">
-                    <td colspan="3" style="padding: 14px 16px; font-size: 15px; font-weight: 700; color: #78350F; text-align: right;">Total Amount:</td>
+                    <td colspan="3" style="padding: 14px 16px; font-size: 15px; font-weight: 700; color: #78350F; text-align: right;">${wholesaleDiscount > 0 ? 'Discounted Total Amount:' : 'Total Amount:'}</td>
                     <td style="padding: 14px 16px; font-size: 16px; font-weight: 800; color: #92400E; text-align: right;">${formatGHS(order.totalAmount)}</td>
                   </tr>
                 </tfoot>
@@ -720,12 +756,20 @@ export async function sendOrderConfirmationEmail(
   }
 
   if (options.preferResendTemplate !== false) {
+    const totalQuantity = (order.items || []).reduce((sum, item) => sum + (Number(item.quantity) || 1), 0)
+    const isWholesale = order.orderType === 'WHOLESALE' || totalQuantity > 15
     const shortId = order.id ? order.id.slice(0, 8).toUpperCase() : 'PENDING'
     const firstName = order.customerName ? order.customerName.split(' ')[0] : 'Customer'
-    const itemsSummary =
+    const rawItemsSummary =
       (order.items || [])
         .map((i) => `${i.quantity}x ${getItemName(i)}`)
         .join(', ') || 'Pastry items'
+    const itemsSummary = (isWholesale && totalQuantity > 15)
+      ? `${rawItemsSummary} • (10% Wholesale Discount Applied on ${totalQuantity} items)`
+      : rawItemsSummary
+    const totalDisplay = (isWholesale && totalQuantity > 15)
+      ? `${formatGHS(order.totalAmount)} (Includes 10% Wholesale Discount)`
+      : formatGHS(order.totalAmount)
 
     const templateResult = await sendEmail({
       to: email,
@@ -736,7 +780,7 @@ export async function sendOrderConfirmationEmail(
           order_id: shortId,
           order_date: formatDate(order.createdAt || new Date()),
           order_items: itemsSummary,
-          order_total: formatGHS(order.totalAmount),
+          order_total: totalDisplay,
           delivery_address:
             order.deliveryAddress ||
             (order.deliveryType === 'PICKUP' ? 'In-Store Pickup' : 'Accra, Ghana'),
@@ -786,6 +830,11 @@ export async function sendPaymentReceiptEmail(
     const shortId = order.id ? order.id.slice(0, 8).toUpperCase() : 'PAID'
     const reference = transaction?.reference || order.paystackReference || 'Verified'
     const channel = transaction?.channel ? String(transaction.channel).toUpperCase() : 'Paystack Checkout'
+    const totalQuantity = (order.items || []).reduce((sum, item) => sum + (Number(item.quantity) || 1), 0)
+    const isWholesale = order.orderType === 'WHOLESALE' || totalQuantity > 15
+    const amountDisplay = isWholesale && totalQuantity > 15
+      ? `${formatGHS(order.totalAmount)} (Wholesale 10% Off)`
+      : formatGHS(order.totalAmount)
 
     const templateResult = await sendEmail({
       to: email,
@@ -794,7 +843,7 @@ export async function sendPaymentReceiptEmail(
         variables: {
           CUSTOMER_NAME: order.customerName || 'Valued Customer',
           ORDER_ID: shortId,
-          AMOUNT_PAID: formatGHS(order.totalAmount),
+          AMOUNT_PAID: amountDisplay,
           PAYMENT_REF: reference,
           PAYMENT_METHOD: channel,
           PAID_AT: formatDate(order.paidAt || new Date()),

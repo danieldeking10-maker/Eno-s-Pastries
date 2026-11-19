@@ -63,6 +63,16 @@ export async function POST(request: Request) {
       console.warn('[Signup] Prisma create note (non-fatal):', prismaCreateErr)
     }
 
+    // Send welcome email via Resend template 'welcome-enos-pastries'
+    try {
+      const { sendWelcomeEmail } = await import('@/lib/email')
+      sendWelcomeEmail(email, name || email.split('@')[0]).catch((err) =>
+        console.warn('[Resend] Welcome email failed:', err)
+      )
+    } catch (emailErr) {
+      console.warn('[Resend] Welcome email dispatch error:', emailErr)
+    }
+
     const sessionCookie = createSessionCookieValue({ email, role })
     const res = NextResponse.json({ ok: true, email, role, canAccessAdmin: isUserAdmin })
     res.cookies.set('auth_session', sessionCookie, {

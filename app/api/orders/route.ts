@@ -123,7 +123,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No valid products found for order' }, { status: 400 });
     }
 
-    const totalAmount = itemsToCreate.reduce((sum, item) => sum + item.price * item.quantity, 0)
+    // Wholesale pricing: orders with more than 15 total quantity receive an automatic 10% wholesale discount
+    const totalQuantity = itemsToCreate.reduce((sum, item) => sum + item.quantity, 0)
+    const isWholesaleQuantity = totalQuantity > 15
+    const effectiveOrderType = isWholesaleQuantity ? 'WHOLESALE' : (body.orderType === 'WHOLESALE' ? 'WHOLESALE' : 'RETAIL')
+    const rawSubtotal = itemsToCreate.reduce((sum, item) => sum + item.price * item.quantity, 0)
+    const wholesaleDiscount = isWholesaleQuantity ? Math.round(rawSubtotal * 0.10 * 100) / 100 : 0
+    const totalAmount = Math.round((rawSubtotal - wholesaleDiscount) * 100) / 100
 
     let order: any = null
     try {
@@ -131,7 +137,7 @@ export async function POST(request: Request) {
         data: {
           totalAmount,
           status: 'PENDING',
-          orderType: body.orderType ?? 'RETAIL',
+          orderType: effectiveOrderType,
           deliveryType: body.deliveryType ?? 'PICKUP',
           deliveryAddress: body.deliveryAddress,
           deliveryDate: body.deliveryDate ? new Date(body.deliveryDate) : null,
@@ -155,7 +161,7 @@ export async function POST(request: Request) {
         id: generatedId,
         totalAmount,
         status: 'PENDING',
-        orderType: body.orderType ?? 'RETAIL',
+        orderType: effectiveOrderType,
         deliveryType: body.deliveryType ?? 'PICKUP',
         deliveryAddress: body.deliveryAddress,
         deliveryDate: body.deliveryDate ? new Date(body.deliveryDate) : null,

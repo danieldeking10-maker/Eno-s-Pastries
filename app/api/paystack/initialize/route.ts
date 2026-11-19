@@ -157,7 +157,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No valid products in cart' }, { status: 400 })
     }
 
-    const calculatedTotal = itemsToCreate.reduce((sum, item) => sum + item.price * item.quantity, 0)
+    // Wholesale pricing: orders with more than 15 total quantity receive an automatic 10% wholesale discount
+    const totalQuantity = itemsToCreate.reduce((sum, item) => sum + item.quantity, 0)
+    const isWholesaleQuantity = totalQuantity > 15
+    const effectiveOrderType = isWholesaleQuantity ? 'WHOLESALE' : (orderType === 'WHOLESALE' ? 'WHOLESALE' : 'RETAIL')
+    const rawSubtotal = itemsToCreate.reduce((sum, item) => sum + item.price * item.quantity, 0)
+    const wholesaleDiscount = isWholesaleQuantity ? Math.round(rawSubtotal * 0.10 * 100) / 100 : 0
+    const calculatedTotal = Math.round((rawSubtotal - wholesaleDiscount) * 100) / 100
     if (calculatedTotal <= 0) {
       return NextResponse.json({ error: 'Order total must be greater than zero' }, { status: 400 })
     }
@@ -174,7 +180,7 @@ export async function POST(request: Request) {
           id: fallbackOrderId,
           totalAmount: calculatedTotal,
           status: 'PENDING',
-          orderType: orderType ?? 'RETAIL',
+          orderType: effectiveOrderType,
           deliveryType: deliveryType ?? 'PICKUP',
           deliveryAddress: deliveryAddress ?? null,
           deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
@@ -197,7 +203,7 @@ export async function POST(request: Request) {
             id: fallbackOrderId,
             totalAmount: calculatedTotal,
             status: 'PENDING',
-            orderType: orderType ?? 'RETAIL',
+            orderType: effectiveOrderType,
             deliveryType: deliveryType ?? 'PICKUP',
             deliveryAddress: deliveryAddress ?? null,
             deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
@@ -217,7 +223,7 @@ export async function POST(request: Request) {
       id: fallbackOrderId,
       totalAmount: calculatedTotal,
       status: 'PENDING',
-      orderType: orderType ?? 'RETAIL',
+      orderType: effectiveOrderType,
       deliveryType: deliveryType ?? 'PICKUP',
       deliveryAddress: deliveryAddress ?? null,
       deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
@@ -248,6 +254,33 @@ export async function POST(request: Request) {
           data: { status: 'CONFIRMED' },
         }).catch(() => {})
       }
+
+      // Dispatch confirmation & receipt emails for demo checkout completion
+      try {
+        const { sendOrderConfirmationEmail, sendPaymentReceiptEmail, sendAdminOrderNotification } = await import('@/lib/email')
+        const demoOrder = {
+          ...orderWithReference,
+          status: 'CONFIRMED',
+          paidAt: new Date(),
+          totalAmount: calculatedTotal,
+          wholesaleDiscount,
+          orderType: effectiveOrderType,
+          items: itemsToCreate.map((item) => {
+            const p = remoteProducts.find((x) => x.id === item.productId) || localProducts.find((x) => x.id === item.productId)
+            return {
+              ...item,
+              name: p?.name,
+              product: p || null,
+            }
+          }),
+        }
+        sendOrderConfirmationEmail(demoOrder).catch((e) => console.warn('[Resend] Demo confirmation notice:', e))
+        sendPaymentReceiptEmail(demoOrder, { reference, channel: 'DEMO' }).catch((e) => console.warn('[Resend] Demo receipt notice:', e))
+        sendAdminOrderNotification(demoOrder).catch((e) => console.warn('[Resend] Demo admin alert notice:', e))
+      } catch (e) {
+        console.warn('[Resend] Demo email trigger error:', e)
+      }
+
       return NextResponse.json({
         authorizationUrl: `${origin}/dashboard?payment=success&demo=true&ref=${reference}`,
         reference,
@@ -380,6 +413,30 @@ export async function POST(request: Request) {
         where: { id: order.id },
         data: { paystackReference: finalReference },
       }).catch(() => {})
+    }
+
+    // Trigger order confirmation email to customer & kitchen alert to admin
+    try {
+      const { sendOrderConfirmationEmail, sendAdminOrderNotification } = await import('@/lib/email')
+      const emailOrder = {
+        ...orderWithReference,
+        paystackReference: finalReference,
+        totalAmount: calculatedTotal,
+        wholesaleDiscount,
+        orderType: effectiveOrderType,
+        items: itemsToCreate.map((item) => {
+          const p = remoteProducts.find((x) => x.id === item.productId) || localProducts.find((x) => x.id === item.productId)
+          return {
+            ...item,
+            name: p?.name,
+            product: p || null,
+          }
+        }),
+      }
+      sendOrderConfirmationEmail(emailOrder).catch((e) => console.warn('[Resend] Checkout order confirmation failed:', e))
+      sendAdminOrderNotification(emailOrder).catch((e) => console.warn('[Resend] Checkout admin alert failed:', e))
+    } catch (emailErr) {
+      console.warn('[Resend] Checkout email dispatch error:', emailErr)
     }
 
     return NextResponse.json({
