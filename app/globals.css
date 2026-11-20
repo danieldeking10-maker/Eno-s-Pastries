@@ -131,3 +131,40 @@ h1, h2, h3, h4, h5, h6 {
     display: block !important;
   }
 }
+
+/* ── Leaflet / OpenStreetMap map fixes ──────────────────────────────────────
+   Keep map panes below admin modals (z-50) but above normal content.
+   The map container itself must have an explicit height – handled inline.
+   ───────────────────────────────────────────────────────────────────────── */
+.leaflet-container {
+  font-family: inherit;
+  z-index: 0;
+}
+.leaflet-pane {
+  z-index: 4;
+}
+.leaflet-tile-pane {
+  z-index: 2;
+}
+.leaflet-overlay-pane {
+  z-index: 4;
+}
+.leaflet-shadow-pane {
+  z-index: 5;
+}
+.leaflet-marker-pane {
+  z-index: 6;
+}
+.leaflet-tooltip-pane {
+  z-index: 7;
+}
+.leaflet-popup-pane {
+  z-index: 8;
+}
+.leaflet-control {
+  z-index: 10;
+}
+/* Prevent Leaflet attribution from being cut off */
+.leaflet-bottom {
+  z-index: 10;
+}

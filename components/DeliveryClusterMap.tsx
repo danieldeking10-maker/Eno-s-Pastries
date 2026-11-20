@@ -1,14 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react'
-import {
-  APIProvider,
-  Map,
-  AdvancedMarker,
-  Pin,
-  InfoWindow,
-  useAdvancedMarkerRef
-} from '@vis.gl/react-google-maps'
+import dynamic from 'next/dynamic'
 import {
   MapPin,
   Truck,
@@ -29,6 +22,19 @@ import {
   Map as MapIcon,
   DollarSign
 } from 'lucide-react'
+
+// Dynamically import LeafletClusterMap (SSR-disabled – Leaflet needs window)
+const LeafletClusterMap = dynamic(
+  () => import('@/components/admin/LeafletClusterMap'),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="w-full h-full min-h-[480px] flex items-center justify-center bg-stone-900">
+        <span className="text-amber-300 text-xs font-bold animate-pulse">Loading Accra map…</span>
+      </div>
+    ),
+  }
+)
 
 // Types
 export interface OrderItem {
@@ -163,12 +169,6 @@ export default function DeliveryClusterMap() {
   const [selectedOrder, setSelectedOrder] = useState<(Order & { lat: number; lng: number }) | null>(null)
   const [viewMode, setViewMode] = useState<'MAP' | 'RADAR'>('MAP')
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null)
-
-  // API Key check
-  const apiKey =
-    process.env.NEXT_PUBLIC_GOOGLE_MAPS_PLATFORM_KEY ||
-    process.env.GOOGLE_MAPS_PLATFORM_KEY ||
-    ''
 
   const fetchOrders = async () => {
     setLoading(true)
@@ -395,6 +395,23 @@ export default function DeliveryClusterMap() {
         </div>
       </div>
 
+      {/* Error Banner */}
+      {error && (
+        <div className="p-4 sm:p-6 bg-red-50 border border-red-200/60 flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+          <div>
+            <h4 className="font-bold text-red-800 text-sm">Unable to load orders</h4>
+            <p className="text-red-600 text-xs mt-0.5">{error}</p>
+          </div>
+          <button
+            onClick={fetchOrders}
+            className="ml-auto px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* Filter and Control Toolbar */}
       <div className="p-4 sm:p-6 bg-amber-50/60 border-b border-amber-200/60 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
         {/* Search */}
@@ -483,121 +500,29 @@ export default function DeliveryClusterMap() {
         {/* Map / Radar View Area (7 Cols) */}
         <div className="lg:col-span-7 bg-stone-900 relative border-b lg:border-b-0 lg:border-r border-amber-200/80 min-h-[420px] flex flex-col">
           {viewMode === 'MAP' && (
-            <div className="w-full h-full min-h-[480px] relative">
-              {apiKey ? (
-                <APIProvider apiKey={apiKey} version="weekly">
-                  <Map
-                    defaultCenter={{ lat: BAKERY_HQ.lat, lng: BAKERY_HQ.lng }}
-                    defaultZoom={12}
-                    mapId="ACCRA_DELIVERY_MAP_ID"
-                    internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
-                    style={{ width: '100%', height: '100%', minHeight: '480px' }}
-                  >
-                    {/* Bakery HQ Pin */}
-                    <AdvancedMarker position={{ lat: BAKERY_HQ.lat, lng: BAKERY_HQ.lng }} title={BAKERY_HQ.name}>
-                      <div className="bg-amber-950 text-white p-2 rounded-2xl border-2 border-amber-400 shadow-2xl flex items-center gap-1.5 transform hover:scale-110 transition-transform cursor-pointer">
-                        <Sparkles className="w-4 h-4 text-amber-400" />
-                        <span className="font-extrabold text-xs pr-1">Eno&apos;s Bakery HQ</span>
-                      </div>
-                    </AdvancedMarker>
-
-                    {/* Cluster Pin Markers */}
-                    {clusters.map((cluster) => (
-                      <AdvancedMarker
-                        key={cluster.id}
-                        position={{ lat: cluster.centerLat, lng: cluster.centerLng }}
-                        onClick={() => setSelectedCluster(cluster)}
-                      >
-                        <div
-                          className={`relative group cursor-pointer transform hover:scale-110 transition-all ${
-                            selectedCluster?.id === cluster.id ? 'z-30 scale-110' : 'z-10'
-                          }`}
-                        >
-                          <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl border-2 border-white shadow-xl flex items-center justify-center text-white font-black text-sm">
-                            #{cluster.suggestedStopIndex}
-                          </div>
-                          <div className="absolute -top-2 -right-2 bg-amber-950 text-amber-200 text-[10px] font-black px-1.5 py-0.5 rounded-full border border-amber-400 shadow-xs">
-                            {cluster.orders.length}
-                          </div>
-                          <div className="bg-stone-900/90 text-white font-bold text-[10px] px-2 py-0.5 rounded-md mt-1 whitespace-nowrap shadow-md text-center border border-amber-500/30">
-                            {cluster.zoneName.split('/')[0]}
-                          </div>
-                        </div>
-                      </AdvancedMarker>
-                    ))}
-                  </Map>
-                </APIProvider>
-              ) : (
-                /* Fallback Map Canvas when Google API Key is not set */
-                <div className="w-full h-full min-h-[480px] bg-gradient-to-br from-stone-950 via-stone-900 to-amber-950 p-6 flex flex-col justify-between relative overflow-hidden">
-                  {/* Subtle Map Grid overlay lines */}
-                  <div className="absolute inset-0 bg-[radial-gradient(#d97706_1px,transparent_1px)] [background-size:24px_24px] opacity-15 pointer-events-none" />
-
-                  {/* Header info inside Map Canvas */}
-                  <div className="relative z-10 flex items-center justify-between bg-stone-900/80 backdrop-blur-md p-3 rounded-2xl border border-amber-500/30">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-                      <span className="text-amber-200 text-xs font-bold font-mono">ACCRA DISPATCH RADAR</span>
-                    </div>
-                    <span className="text-[11px] font-medium text-amber-300/80">Origin: Independence Ave (HQ)</span>
-                  </div>
-
-                  {/* Visual Cluster Diagram in Map View */}
-                  <div className="relative z-10 my-auto py-8">
-                    <div className="max-w-md mx-auto relative flex flex-col items-center gap-6">
-                      {/* Central Bakery HQ */}
-                      <div className="bg-amber-500 text-amber-950 px-4 py-2.5 rounded-2xl font-black text-xs shadow-2xl flex items-center gap-2 border-2 border-white animate-pulse">
-                        <Sparkles className="w-4 h-4 text-amber-950" />
-                        <span>HQ: Eno&apos;s Bakery (Central Kitchen)</span>
-                      </div>
-
-                      {/* Cluster Nodes Flow */}
-                      <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-                        {clusters.map((cluster) => (
-                          <div
-                            key={cluster.id}
-                            onClick={() => setSelectedCluster(cluster)}
-                            className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
-                              selectedCluster?.id === cluster.id
-                                ? 'bg-amber-600 text-white border-amber-300 shadow-xl scale-102'
-                                : 'bg-stone-800/80 hover:bg-stone-800 text-amber-100 border-amber-500/30 shadow-md'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between mb-1.5">
-                              <span className="text-xs font-extrabold uppercase tracking-wider text-amber-300 flex items-center gap-1">
-                                <span className="bg-amber-500/20 px-1.5 py-0.5 rounded text-[10px]">Stop #{cluster.suggestedStopIndex}</span>
-                                {cluster.zoneName}
-                              </span>
-                              <span className="bg-amber-400 text-amber-950 text-[10px] font-black px-2 py-0.5 rounded-full">
-                                {cluster.orders.length} {cluster.orders.length === 1 ? 'order' : 'orders'}
-                              </span>
-                            </div>
-
-                            <p className="text-[11px] text-amber-200/80 line-clamp-1 mb-2 font-mono">
-                              {cluster.orders.map(o => o.customerName).join(', ')}
-                            </p>
-
-                            <div className="flex items-center justify-between text-[11px] font-semibold text-amber-300 pt-2 border-t border-white/10">
-                              <span>~{cluster.distanceFromHQKm} km from HQ</span>
-                              <span className="text-emerald-300 font-bold">GH₵{cluster.totalRevenue.toFixed(2)}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Footer Notice */}
-                  <div className="relative z-10 bg-amber-950/90 backdrop-blur-md p-3 rounded-xl border border-amber-800/60 text-[11px] text-amber-200/90 flex items-center justify-between">
-                    <span>💡 Tip: Set <code>GOOGLE_MAPS_PLATFORM_KEY</code> in Settings to view full satellite Google Map tiles.</span>
-                    <button
-                      onClick={() => setViewMode('RADAR')}
-                      className="text-amber-300 underline font-bold hover:text-white cursor-pointer"
-                    >
-                      Expand Radar
-                    </button>
-                  </div>
+            <div className="w-full h-[480px] sm:h-[520px] min-h-[480px] relative flex flex-col">
+              {loading && clusters.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-stone-500 bg-stone-900/50 rounded-2xl border border-dashed border-stone-700/50 m-2 p-8">
+                  <RefreshCw className="w-10 h-10 text-amber-400 mb-3 animate-spin" />
+                  <h4 className="font-bold text-stone-300 mb-1">Loading Accra map…</h4>
+                  <p className="text-xs text-stone-400 text-center max-w-xs">
+                    Fetching delivery orders and clustering neighborhoods.
+                  </p>
                 </div>
+              ) : clusters.length === 0 && !error ? (
+                <div className="flex flex-col items-center justify-center h-full text-stone-500 bg-stone-900/50 rounded-2xl border border-dashed border-stone-700/50 m-2 p-8">
+                  <Truck className="w-12 h-12 text-stone-700 mb-3 opacity-50" />
+                  <h4 className="font-bold text-stone-300 mb-1">No delivery clusters yet</h4>
+                  <p className="text-xs text-stone-400 text-center max-w-xs">
+                    Active delivery orders will appear on the Accra map here. Use the sidebar to inspect clusters.
+                  </p>
+                </div>
+              ) : (
+                <LeafletClusterMap
+                  clusters={clusters}
+                  selectedCluster={selectedCluster}
+                  onClusterClick={setSelectedCluster}
+                />
               )}
             </div>
           )}
