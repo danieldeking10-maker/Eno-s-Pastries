@@ -432,7 +432,7 @@ export default function CartPage() {
                         value={checkoutForm.customerPhone}
                         onChange={(e) => setCheckoutForm({ ...checkoutForm, customerPhone: e.target.value })}
                         className="w-full px-5 py-3.5 border-2 border-amber-200 rounded-xl focus:border-amber-600 focus:outline-none text-stone-900 transition"
-                        placeholder="0534716125"
+                        placeholder="024 *** ****"
                       />
                     </div>
 
